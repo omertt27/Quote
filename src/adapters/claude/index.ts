@@ -1,5 +1,6 @@
 import { type Row, rowBrightText, rowText } from '../../terminal/screen.js';
 import type { Adapter, Readiness } from '../types.js';
+import { claudeQuoteSource } from './source.js';
 
 /** How far above the bottom of the screen the input box's lower edge can be (status lines, hints). */
 const BOTTOM_SEARCH_ROWS = 10;
@@ -108,4 +109,5 @@ export const claude: Adapter = {
   supported: true,
   inspect: inspectClaude,
   isOwnDraft: isOwnClaudeDraft,
+  quoteSource: claudeQuoteSource,
 };

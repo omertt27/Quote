@@ -1,4 +1,4 @@
-import type { Adapter, Readiness } from '../adapters/types.js';
+import type { Adapter, QuoteSource, Readiness } from '../adapters/types.js';
 import { Composer } from '../composer/composer.js';
 import { cleanQuote } from '../selection/extract.js';
 import { Selection } from '../selection/selection.js';
@@ -16,7 +16,7 @@ import type { AgentProcess, ExitInfo } from '../terminal/process.js';
 import { enterOverlay, moveTo, renderComposer, renderRow, renderScreen, restoreModes } from '../terminal/render.js';
 import { ScreenModel, type Snapshot, type TerminalModes } from '../terminal/screen.js';
 import { fit } from './text.js';
-import { composeMessage, sanitize } from './compose.js';
+import { composeMessage, describeSource, sanitize } from './compose.js';
 import type { RemoteResult } from './remote.js';
 
 export type Mode = 'passthrough' | 'selecting' | 'composing' | 'sending';
@@ -119,6 +119,8 @@ export class Session {
   // Reply state. A reply survives leaving the overlay while it waits to be sent.
   private composer = new Composer();
   private quote = '';
+  /** The tool call the quote was selected from, if the adapter could tell. */
+  private quoteSource: QuoteSource | null = null;
   private status: string | undefined;
   private delivering = false;
   private lastReadiness: Readiness = { state: 'unknown' };
@@ -158,6 +160,7 @@ export class Session {
     const cleanedReply = sanitize(reply).trim();
     if (cleanedQuote === '' || cleanedReply === '') return 'invalid';
     this.quote = cleanedQuote;
+    this.quoteSource = null;
     this.composer = new Composer();
     this.composer.text = cleanedReply;
     this.hasKeptReply = true;
@@ -314,7 +317,12 @@ export class Session {
       this.paint();
       return;
     }
-    this.beginComposing(text);
+    // Selected in the overlay, so the exact row is known: name the command that printed it. A
+    // clipboard copy can't do this, because identical text may appear in several runs.
+    const start = this.selection?.range()?.start;
+    const lines = this.snapshot?.lines;
+    const source = start && lines ? (this.adapter.quoteSource?.(lines, start.row) ?? null) : null;
+    this.beginComposing(text, source);
   }
 
   private async useClipboard(): Promise<void> {
@@ -360,9 +368,10 @@ export class Session {
     return cleanQuote(restored, this.model.cols, startsMidLine) || null;
   }
 
-  private beginComposing(quote: string): void {
+  private beginComposing(quote: string, source: QuoteSource | null = null): void {
     this.quoteFromClipboard = false;
     this.quote = quote;
+    this.quoteSource = source;
     this.composer = new Composer();
     this.status = undefined;
     this.mode = 'composing';
@@ -658,7 +667,7 @@ export class Session {
         this.failDelivery(`${this.adapter.label} has not enabled bracketed paste. Nothing was sent.`);
         return;
       }
-      const message = composeMessage({ quote: this.quote, reply: this.composer.text });
+      const message = composeMessage({ quote: this.quote, reply: this.composer.text, source: this.quoteSource });
 
       // Step 1: paste, but only into an empty box on a quiet screen, checked just before writing.
       await this.model.settled();
@@ -738,7 +747,7 @@ export class Session {
       this.paint();
       return;
     }
-    const message = composeMessage({ quote: this.quote, reply: this.composer.text });
+    const message = composeMessage({ quote: this.quote, reply: this.composer.text, source: this.quoteSource });
     this.composer = new Composer();
     this.quote = '';
     this.hasKeptReply = false;
@@ -758,6 +767,7 @@ export class Session {
     return renderComposer({
       label: this.adapter.label,
       quote: this.quote,
+      source: this.quoteSource ? describeSource(this.quoteSource) : undefined,
       composer: this.composer,
       cols: this.model.cols,
       screenRows: this.model.rows,

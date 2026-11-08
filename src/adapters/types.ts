@@ -1,4 +1,4 @@
-import type { Row } from '../terminal/screen.js';
+import type { LineSource, Row } from '../terminal/screen.js';
 
 export type Readiness =
   /** The input box is visible and empty: a reply can be delivered. */
@@ -11,6 +11,17 @@ export type Readiness =
   | { state: 'blocked'; reason: string }
   /** The screen could not be recognised. Treated as unsafe. */
   | { state: 'unknown' };
+
+/** The command whose output a quote came from. */
+export interface QuoteSource {
+  /** Tool name as the agent shows it, e.g. `Bash`. */
+  tool: string;
+  /** The call's arguments as shown, e.g. `npm test -- auth.spec.ts`. */
+  args: string;
+  /** Which run of this exact call it was, counting from 1, and how many are in the scrollback. */
+  run: number;
+  runs: number;
+}
 
 export interface Adapter {
   id: string;
@@ -25,4 +36,6 @@ export interface Adapter {
   inspect(rows: readonly Row[]): Readiness;
   /** True when a draft's visible text is the message Quote pasted, not something else. */
   isOwnDraft(draft: string, message: string): boolean;
+  /** The tool call whose output contains buffer row `row`, if the agent shows one. */
+  quoteSource?(lines: LineSource, row: number): QuoteSource | null;
 }

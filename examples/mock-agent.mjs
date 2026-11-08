@@ -7,7 +7,7 @@
  *
  * Try it: QUOTE_CLAUDE_BIN=examples/mock-agent.mjs quote claude
  *
- * Commands: /perm, /perm-odd, /busy <ms>, /alt, /weird, /long, /say a|b, /quit, /crash
+ * Commands: /perm, /perm-odd, /busy <ms>, /alt, /weird, /long, /test, /say a|b, /quit, /crash
  * A message starting with `!` is run as a "shell command" (logged, never executed), and an
  * unknown `/word` is logged as a slash command, so tests can prove neither was triggered.
  *
@@ -153,6 +153,15 @@ function submit() {
   }
   if (message === '/long') {
     for (let i = 1; i <= 200; i++) print(`scrollback line ${i}`);
+    return undefined;
+  }
+  if (message === '/test') {
+    // A tool call and its output, as Claude Code draws them. Run it twice to get identical output
+    // from two runs of the same command.
+    log({ type: 'tool', command: 'npm test -- auth.spec.ts' });
+    print('\n⏺ Bash(npm test -- auth.spec.ts)');
+    print('  ⎿  FAIL tests/auth.spec.ts');
+    print('     AssertionError: expected 401 to equal 403\n');
     return undefined;
   }
   if (message.startsWith('/say ')) {

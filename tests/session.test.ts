@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { claude } from '../src/adapters/claude/index.js';
 import { Session } from '../src/core/session.js';
 import type { AgentProcess, ExitInfo } from '../src/terminal/process.js';
-import { Harness, sleep, waitUntil } from './helpers.js';
+import { Harness, findRow, sleep, waitUntil } from './helpers.js';
 
 let harness: Harness | null = null;
 afterEach(async (context) => {
@@ -32,6 +32,25 @@ describe('reply workflow with the mock agent', () => {
     expect(screen).toContain('turn 1] Understood: Why fail open?');
     // The real terminal left the overlay's alternate screen.
     expect(h.output.lastIndexOf('\x1b[?1049l')).toBeGreaterThan(h.output.lastIndexOf('\x1b[?1049h'));
+  });
+
+  it('names the command and run when quoting tool output that appears twice', async () => {
+    const h = (harness = new Harness());
+    await h.ready();
+    await h.say('/test');
+    await h.say('/test');
+    await h.openOverlay();
+    const target = findRow(h.session.model.snapshot().rows, 'AssertionError', true);
+    h.type('g');
+    for (let i = 0; i < target; i++) h.type('j');
+    h.type('p');
+    await sleep(10);
+    await h.reply('Why 401?');
+
+    await waitUntil(() => h.messages().length === 1, 4000, 'reply delivery');
+    const message = h.messages()[0]!.message as string;
+    expect(message.startsWith('> [from Bash(npm test -- auth.spec.ts), run 2 of 2]\n')).toBe(true);
+    expect(message).toMatch(/^>\s+AssertionError: expected 401 to equal 403$/m);
   });
 
   it('keeps one conversation across replies and normal input', async () => {

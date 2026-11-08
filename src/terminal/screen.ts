@@ -63,9 +63,26 @@ export class RowSource {
   }
 }
 
+/**
+ * Plain text of buffer rows, read straight from the model without building or caching cells, so a
+ * scan of the whole scrollback stays cheap. Like a live `RowSource`, valid only while frozen.
+ */
+export interface LineSource {
+  readonly length: number;
+  /** The row's text, trailing blanks removed. */
+  text(index: number): string;
+  /** True when the row continues the previous one because of terminal auto-wrap. */
+  wrapped(index: number): boolean;
+}
+
+export function linesOf(texts: readonly string[]): LineSource {
+  return { length: texts.length, text: (i) => texts[i] ?? '', wrapped: () => false };
+}
+
 /** The screen at one moment. Selection works against this, so live output cannot move it. */
 export interface Snapshot {
   rows: RowSource;
+  lines: LineSource;
   /** Index in `rows` of the first row of the visible screen. */
   screenTop: number;
   cols: number;
@@ -297,8 +314,14 @@ export class ScreenModel {
       const line = buffer.getLine(i);
       return line ? this.readRow(line, scratch) : undefined;
     });
+    const lines: LineSource = {
+      length: buffer.length,
+      text: (i) => buffer.getLine(i)?.translateToString(true) ?? '',
+      wrapped: (i) => buffer.getLine(i)?.isWrapped ?? false,
+    };
     return {
       rows,
+      lines,
       screenTop: buffer.baseY,
       cols: this.term.cols,
       screenRows: this.term.rows,

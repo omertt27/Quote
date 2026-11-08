@@ -91,13 +91,15 @@ const MAX_REPLY_ROWS = 8;
 export function renderComposer(options: {
   label: string;
   quote: string;
+  /** Where the quote came from, e.g. `from Bash(npm test), run 2 of 3`. */
+  source?: string;
   composer: Composer;
   cols: number;
   screenRows: number;
   status?: string;
   help: string;
 }): ComposerFrame {
-  const { label, quote, composer, cols, screenRows, status, help } = options;
+  const { label, quote, source, composer, cols, screenRows, status, help } = options;
   const inner = Math.max(Math.min(cols, MAX_BOX_WIDTH) - 4, 8);
   const roomy = screenRows >= 16;
 
@@ -115,6 +117,7 @@ export function renderComposer(options: {
   const shownReply = layout.rows.slice(firstReply, firstReply + maxReply);
 
   const lines = [titledEdge(`Replying to ${label}`, inner - 1)];
+  if (source) lines.push(boxLine(fit(source, inner), inner, DIM));
   for (const [i, row] of shownQuote.entries()) {
     const open = i === 0 ? '“' : ' ';
     const close = i === shownQuote.length - 1 ? '”' : '';

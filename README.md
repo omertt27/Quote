@@ -112,6 +112,21 @@ Quote sends only when Claude's input box is empty and waiting:
 Your reply is kept until it is sent or you cancel it. Long replies may show in Claude's prompt as
 `[Pasted text #1 +N lines]`, but Claude receives the full text.
 
+### Quoting a command's output
+
+When you select inside Quote (way B) from a tool's output, such as a failing test, Quote adds the
+command that printed it. If the same command ran more than once, it also says which run:
+
+```text
+> [from Bash(npm test -- auth.spec.ts), run 2 of 2]
+> AssertionError: expected 401 to equal 403
+
+Why 401? I changed this to 403 in the last fix.
+```
+
+So the same error from two runs is never mixed up. A copied quote (way A) can't do this: Quote can't
+tell which copy of the text you selected.
+
 ### Mac: Alt+R types ® instead
 
 By default, Terminal.app and iTerm2 type `®` for Option+R. Quote treats `®` as the hotkey too, so
