@@ -72,7 +72,7 @@ export async function spawnPty(options: SpawnOptions): Promise<AgentProcess> {
     };
   } catch (error) {
     throw new PtyUnavailableError(
-      `Could not start a pseudo-terminal: ${(error as Error).message}. ` +
+      `Could not start a pseudo-terminal (${(error as Error).message.replace(/\.$/, '')}). ` +
         'Sandboxed environments often forbid PTY allocation.',
     );
   }

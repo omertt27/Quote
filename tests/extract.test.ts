@@ -49,6 +49,16 @@ describe('cleanQuote', () => {
     expect(cleanQuote('⏺ The plan:\n  step one', 80)).toBe('The plan:\nstep one');
   });
 
+  it('dedents text copied from mid-line, where only the later lines keep their indent', () => {
+    expect(cleanQuote('runtime should fail\n     open when down\n       nested', 80, true)).toBe(
+      'runtime should fail\nopen when down\n  nested',
+    );
+  });
+
+  it('keeps a list item\'s hanging indent when the selection starts at the line', () => {
+    expect(cleanQuote('  2. The runtime should\n     fail open', 80)).toBe('2. The runtime should\n   fail open');
+  });
+
   it('removes box borders', () => {
     expect(cleanQuote('│ inside a box   │\n│ second row     │', 80)).toBe('inside a box\nsecond row');
   });

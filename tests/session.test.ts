@@ -22,12 +22,14 @@ describe('reply workflow with the mock agent', () => {
     await waitUntil(() => h.messages().length === 1, 4000, 'reply delivery');
     await waitUntil(() => h.session.mode === 'passthrough', 2000, 'overlay to close');
     const message = h.messages()[0]!.message as string;
-    expect(message).toContain('<quoted-output>');
-    expect(message).toContain('The runtime should fail open when the');
+    expect(message.startsWith('> 2. The runtime should fail open when the\n>')).toBe(true);
     expect(message).toContain('policy server becomes unavailable.');
     expect(message).not.toContain('authentication');
-    expect(message).toContain('My reply: Why fail open? This is a security gateway.');
-    expect(h.screen().join('\n')).toContain('turn 1] Understood: My reply: Why fail open?');
+    expect(message.endsWith('\n\nWhy fail open? This is a security gateway.')).toBe(true);
+    // The quote shows up in the conversation, above the reply, as it does in ChatGPT.
+    const screen = h.screen().join('\n');
+    expect(screen).toContain('> 2. The runtime should fail open when the');
+    expect(screen).toContain('turn 1] Understood: Why fail open?');
     // The real terminal left the overlay's alternate screen.
     expect(h.output.lastIndexOf('\x1b[?1049l')).toBeGreaterThan(h.output.lastIndexOf('\x1b[?1049h'));
   });
@@ -93,7 +95,7 @@ describe('reply workflow with the mock agent', () => {
     await sleep(100);
     h.type('\x1br'); // Resume the kept reply.
     await waitUntil(() => h.messages().length === 1, 4000, 'resumed delivery');
-    expect(h.messages()[0]!.message).toContain('My reply: Explain please');
+    expect((h.messages()[0]!.message as string).endsWith('\n\nExplain please')).toBe(true);
     expect(h.events().some((e) => e.type === 'confirmed')).toBe(false);
   });
 

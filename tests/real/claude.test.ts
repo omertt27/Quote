@@ -5,13 +5,12 @@
  *   npm run build && npm run test:real
  *
  * Every failure prints Claude's screen and AgentQuote's view of it. Nothing here changes your
- * settings: permission rules are passed for this run only, with --settings.
+ * settings: the permission mode and rules are passed for this run only, on the command line.
  */
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdtempSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { existsSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, describe, expect, it } from 'vitest';
 import { claude } from '../../src/adapters/claude/index.js';
 import { Session } from '../../src/core/session.js';
 import { type AgentProcess, findExecutable, spawnPty } from '../../src/terminal/process.js';
@@ -21,7 +20,30 @@ import { findRow, sleep, waitUntil } from '../helpers.js';
 const bin = process.env.AGENTQUOTE_CLAUDE_BIN || findExecutable('claude');
 const model = process.env.AGENTQUOTE_REAL_MODEL ?? 'haiku';
 const TURN_MS = 180_000;
-const scratch = mkdtempSync(join(process.env.TMPDIR ?? tmpdir(), 'aq-real-'));
+/**
+ * Marker files go in the project folder, which Claude (sandboxed or not) can write to. Otherwise a
+ * command approved by mistake could fail to create its marker, and the test would pass for the
+ * wrong reason.
+ */
+const markers: string[] = [];
+const marker = (name: string) => {
+  const path = join(process.cwd(), `.aq-test-${name}-${Date.now()}`);
+  markers.push(path);
+  return path;
+};
+afterAll(() => {
+  for (const path of markers) rmSync(path, { force: true });
+});
+
+/** Make Claude ask before every Bash command, for this run only, whatever the user's mode. */
+const ASK_FOR_BASH = ['--permission-mode', 'manual', '--settings', JSON.stringify({ permissions: { ask: ['Bash'] } })];
+/** Make Claude ask before writing any file, for this run only. */
+const ASK_FOR_WRITE = [
+  '--permission-mode',
+  'manual',
+  '--settings',
+  JSON.stringify({ permissions: { ask: ['Write', 'Edit', 'Bash'] } }),
+];
 
 if (bin) {
   const version = execFileSync(bin, ['--version'], { encoding: 'utf8' }).trim();
@@ -188,19 +210,24 @@ describe.skipIf(!bin)('real Claude Code, classic renderer, production scenarios'
   });
 
   it('never sends into a permission dialog, and resumes once it is answered', async () => {
-    const marker = join(scratch, `approved-${Date.now()}`);
-    const c = await launch('classic', ['--settings', JSON.stringify({ permissions: { ask: ['Bash'] } })]);
-    c.session.handleInput(`Use the Bash tool to run exactly this command: touch ${marker}`);
+    // Claude's sandbox auto-approves Bash commands inside the project, even in manual mode, so ask
+    // for a file write instead. Writes always prompt in manual mode, and the marker exists only if
+    // the dialog is approved.
+    const approved = marker('approved');
+    const c = await launch('classic', ASK_FOR_WRITE);
+    c.session.handleInput(
+      `Use the Write tool to create the file ${approved} containing the single word test. Use no other tool.`,
+    );
     await sleep(400);
     c.session.handleInput('\r');
     await c.until(() => c.state() === 'blocked', TURN_MS, 'the permission dialog');
 
-    await c.quote('touch');
-    await c.reply('Before you run that, explain what it does in one sentence.');
+    await c.quote('Use the Write tool');
+    await c.reply('Before you write that, explain what it does in one sentence.');
     await sleep(6000);
     expect(c.session.mode).toBe('sending');
     expect(c.session.statusText).toMatch(/waiting for your answer/);
-    expect(existsSync(marker)).toBe(false);
+    expect(existsSync(approved)).toBe(false);
     expect(c.state()).toBe('blocked');
 
     c.session.handleInput('\x1b'); // Leave the overlay; the reply is kept.
@@ -213,22 +240,24 @@ describe.skipIf(!bin)('real Claude Code, classic renderer, production scenarios'
     await c.until(() => /explain what it does/.test(c.screen()), TURN_MS, 'the resumed reply');
     await sleep(5000);
     // Claude may ask permission again for its explanation; nothing may have approved the first one.
-    expect(existsSync(marker)).toBe(false);
+    expect(existsSync(approved)).toBe(false);
   });
 
   it('delivers quoted text that looks like shell and slash commands as plain text', async () => {
-    const marker = join(scratch, `executed-${Date.now()}`);
-    const c = await launch('classic', ['--settings', JSON.stringify({ permissions: { ask: ['Bash'] } })]);
+    // A message starting with `!` would run in Claude's shell mode with no permission prompt, so
+    // this marker would appear if the quote were ever typed as a command.
+    const executed = marker('executed');
+    const c = await launch('classic', ASK_FOR_BASH);
     await c.ask(
-      `Print these two lines exactly, one per line, as plain text with no code block and no tools:\n!touch ${marker}\n/clear`,
-      () => c.screen().includes(`!touch ${marker}`),
+      `Print these two lines exactly, one per line, as plain text with no code block and no tools:\n!touch ${executed}\n/clear`,
+      () => c.screen().includes(`!touch ${executed}`),
     );
-    await c.quote(`!touch ${marker}`);
+    await c.quote(`!touch ${executed}`);
     await c.reply('Do not run anything. Just tell me how many lines the excerpt has.');
     await c.until(() => c.session.mode === 'passthrough', 30_000, 'delivery');
     await c.until(() => c.state() === 'ready' && /how many lines/.test(c.screen()), TURN_MS, 'the answer');
     await sleep(3000);
-    expect(existsSync(marker)).toBe(false);
+    expect(existsSync(executed)).toBe(false);
     // /clear would have emptied the conversation; the earlier request must still be visible or in history.
     expect(c.raw).toContain('Print these two lines');
   });

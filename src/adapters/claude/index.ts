@@ -15,7 +15,12 @@ const OPTION = /^\s*[│|]?\s*[❯>]?\s*\d+\.\s/u;
  * meaning. Outside the box only this counts, because the transcript has numbered lists too.
  */
 const SELECTED_OPTION = /^\s*[│|]?\s*❯\s*\d+\.\s/u;
-const BUSY = /esc to interrupt/i;
+/**
+ * Claude is working. 2.1.319 shows only a spinner line such as `✳ Cooking… (2s · thinking)`. A
+ * finished turn reads `✻ Sautéed for 3s · done 11:53 AM`, with no ellipsis. Older versions add
+ * `esc to interrupt`.
+ */
+const BUSY = /esc to interrupt|^\s*\S\s+[\p{L}'’-]+…\s*\(/imu;
 /** Only a hint for the status message. Question text is configurable, so safety cannot rest on it. */
 const CONFIRMATION = /do you want to|esc to cancel|\(y\/n\)/i;
 
@@ -73,7 +78,8 @@ export function inspectClaude(rows: readonly Row[]): Readiness {
   }
 
   // Status text sits just above the box while Claude works, or in the footer below it.
-  const status = lines.slice(Math.max(box.top - 4, 0)).join('\n');
+  // The spinner line sits a few rows above the box, with tips and an effort line in between.
+  const status = lines.slice(Math.max(box.top - 6, 0)).join('\n');
   if (BUSY.test(status)) return { state: 'busy' };
 
   const first = rows[box.top + 1] as Row;

@@ -40,13 +40,18 @@ does not send, and the user can still put the reply in the prompt with Ctrl+T.
 
 ## Known limitations
 
-- **Live Claude validation is incomplete.** The workflow is tested end to end against the mock
-  agent, which mimics Claude Code's behaviour. The adapter's patterns come from strings in the
-  Claude Code 2.1.319 binary and from its documentation. They were not checked against a live
-  screen, because the development sandbox could not allocate a PTY. `npm run test:real` runs that
-  check. Run it before relying on this release.
+- **Validated on one setup only:** Claude Code 2.1.319, macOS, the VS Code terminal, and both
+  renderers ([VALIDATION.md](VALIDATION.md)). Linux and other terminals have only the mock-agent
+  tests. Claude updates can change the screen text the adapter reads. When that happens it stops
+  sending instead of guessing, but rerun `npm run test:real` after each Claude update.
+- **A one-frame race remains** between a screen check and the agent reading input. It's detected
+  after the fact and reported, but it can't be prevented. See [SECURITY.md](SECURITY.md).
 - **Fullscreen renderer:** only the visible screen can be quoted, and none of the scrollback. Use
   `CLAUDE_CODE_NO_FLICKER=0` for the whole conversation.
+- **History length:** the classic renderer keeps the last 10,000 rows (`AGENTQUOTE_SCROLLBACK`
+  changes this, at about 1.6 MB per 1,000 rows at 120 columns). Whether Claude's classic renderer
+  ever clears scrollback (`ESC[3J`) is unverified. The real test suite reports it.
+- `p` selects at most 300 rows either side of the cursor.
 - **Native terminal selection is invisible** to AgentQuote. Use the overlay, or copy text and press
   `c`.
 - **Reflow is heuristic.** Prose that the agent wrapped is rejoined into one line, and code, lists,

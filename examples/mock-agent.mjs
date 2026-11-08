@@ -164,6 +164,8 @@ function submit() {
   }
   turn += 1;
   log({ type: 'message', turn, message });
+  // Echo the user's message into the transcript, as Claude Code does, quote included.
+  print(`\n${message.split('\n').map((l) => (l.startsWith('>') ? `\x1b[2m${l}\x1b[0m` : l)).join('\n')}`);
   const preview = message.split('\n').pop();
   respond(`[session ${sessionId} turn ${turn}] Understood: ${preview}`);
   return undefined;

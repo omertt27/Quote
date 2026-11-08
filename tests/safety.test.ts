@@ -96,7 +96,8 @@ describe('quoted text is never executed', () => {
     const message = h.messages()[0]!.message as string;
     expect(message).toContain('!touch pwned');
     expect(message).toContain('/quit');
-    expect(message.startsWith('I am replying')).toBe(true);
+    expect(message.startsWith('> ')).toBe(true);
+    expect(message.endsWith('\n\n/quit')).toBe(true);
     expect(types(h, 'shell', 'command', 'confirmed')).toEqual([]);
     expect(h.exit).toBeNull();
   });
@@ -135,9 +136,9 @@ describe('conversation continuity', () => {
     }
     const messages = h.messages();
     expect(messages.map((m) => m.turn)).toEqual([1, 2, 3]);
-    expect(messages.map((m) => (m.message as string).split('My reply: ')[1])).toEqual(replies.map(([, t]) => t));
+    expect(messages.map((m) => (m.message as string).split('\n\n').at(-1))).toEqual(replies.map(([, t]) => t));
     expect(new Set(messages.map((m) => m.sessionId)).size).toBe(1);
-    expect(h.screen().join('\n')).toContain('turn 3] Understood: My reply: Is MFA covered?');
+    expect(h.screen().join('\n')).toContain('turn 3] Understood: Is MFA covered?');
   });
 });
 
@@ -177,6 +178,6 @@ describe('long conversations', () => {
     await h.reply('This one');
     await waitUntil(() => h.messages().length === 1, 4000, 'delivery');
     const message = h.messages()[0]!.message as string;
-    expect(message).toContain('<quoted-output>\nscrollback line 37\n</quoted-output>');
+    expect(message).toBe('> scrollback line 37\n\nThis one');
   });
 });

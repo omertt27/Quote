@@ -209,7 +209,8 @@ export class Selection {
     // which hides the shared indent from dedent. Start such a selection at the row's edge.
     let start = range.start;
     const before = (this.rows.get(start.row)?.cells ?? []).slice(0, start.col);
-    if (before.every((c) => c.ch === '' || c.ch === ' ')) start = { row: start.row, col: 0 };
-    return cleanQuote(extractRange(this.rows, start, range.end), this.cols);
+    const startsMidLine = !before.every((c) => c.ch === '' || c.ch === ' ');
+    if (!startsMidLine) start = { row: start.row, col: 0 };
+    return cleanQuote(extractRange(this.rows, start, range.end), this.cols, startsMidLine);
   }
 }

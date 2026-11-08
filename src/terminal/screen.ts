@@ -222,6 +222,11 @@ export class ScreenModel {
     await this.parse(data);
   }
 
+  /** Rows in the active buffer, scrollback included. */
+  get historyLength(): number {
+    return this.term.buffer.active.length;
+  }
+
   get alternate(): boolean {
     return this.term.buffer.active.type === 'alternate';
   }
@@ -263,6 +268,25 @@ export class ScreenModel {
       rows.push(line ? this.readRow(line, scratch) : { cells: [], wrapped: false });
     }
     return rows;
+  }
+
+  /**
+   * The whole buffer as plain text, wrapped rows joined. Reads text straight from xterm, without
+   * building cell objects, so it stays cheap at full scrollback.
+   */
+  historyText(fromRow = 0): string {
+    const buffer = this.term.buffer.active;
+    let out = '';
+    // Start on a row's first line, so the text never begins halfway through a wrapped row.
+    let start = Math.max(fromRow, 0);
+    while (start > 0 && buffer.getLine(start)?.isWrapped) start--;
+    for (let i = start; i < buffer.length; i++) {
+      const line = buffer.getLine(i);
+      if (!line) continue;
+      if (i > start && !line.isWrapped) out += '\n';
+      out += line.translateToString(!line.isWrapped && !buffer.getLine(i + 1)?.isWrapped);
+    }
+    return out;
   }
 
   /** A lazy view of the whole buffer. Freeze the model while the returned rows are in use. */

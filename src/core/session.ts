@@ -17,6 +17,7 @@ import { enterOverlay, moveTo, renderComposer, renderRow, renderScreen, restoreM
 import { ScreenModel, type Snapshot, type TerminalModes } from '../terminal/screen.js';
 import { fit } from './text.js';
 import { composeMessage, sanitize } from './compose.js';
+import type { RemoteResult } from './remote.js';
 
 export type Mode = 'passthrough' | 'selecting' | 'composing' | 'sending';
 
@@ -46,6 +47,34 @@ const POLL_MS = 25;
 const SELECT_HELP =
   ' AgentQuote · drag or Shift+arrows to select · p paragraph · v mark · c clipboard · Enter reply · Esc cancel';
 const COMPOSE_HELP = 'Enter: Send    Alt+Enter: Newline    Esc: Cancel';
+const COMPOSE_FROM_CLIPBOARD_HELP = 'Enter: Send    Esc: Cancel    Tab: Quote something else (quoted from your copy)';
+/** Shorter copies are too ambiguous to match against the transcript. */
+const MIN_CLIPBOARD_CHARS = 3;
+const MAX_CLIPBOARD_CHARS = 100_000;
+
+const collapseSpace = (text: string) => text.replace(/\s+/g, ' ').trim();
+
+/**
+ * A copy loses the context of its first line: whatever came before it on the screen row. This finds
+ * that row in the agent's output. A copy that began after other text started mid-line. One that
+ * began after only spaces gets those spaces back, so the lines' relative indentation (a list
+ * item's hanging indent, say) comes out as it would from selecting in the overlay.
+ */
+function restoreCopyContext(history: string, copied: string): { text: string; startsMidLine: boolean } {
+  const lines = copied.replace(/^\n+/, '').split('\n');
+  const first = (lines[0] ?? '').trim();
+  if (first !== '') {
+    for (const row of history.split('\n')) {
+      const at = row.indexOf(first);
+      if (at === -1) continue;
+      const before = row.slice(0, at);
+      if (before.trim() !== '') return { text: lines.join('\n'), startsMidLine: true };
+      lines[0] = before + first;
+      break;
+    }
+  }
+  return { text: lines.join('\n'), startsMidLine: false };
+}
 const SENDING_HELP = 'Esc: Back to agent (reply kept, Alt+R resumes)';
 const SENDING_MANUAL_HELP = 'Esc: Back to agent (reply kept)    Ctrl+T: Put in prompt without sending';
 
@@ -96,6 +125,10 @@ export class Session {
   private hasKeptReply = false;
   /** Set when sending may have gone wrong. Everything automatic stops until the user looks. */
   private alarmed = false;
+  /** The current quote came from the clipboard, so Tab can switch to choosing one by hand. */
+  private quoteFromClipboard = false;
+  /** The last clipboard text quoted, so the same copy isn't reused on the next Alt+R. */
+  private lastClipboardQuote = '';
 
   constructor(options: SessionOptions) {
     this.proc = options.proc;
@@ -112,6 +145,24 @@ export class Session {
     });
     this.proc.onData((data) => this.handleOutput(data));
     this.proc.onExit((exit) => void this.handleExit(exit));
+  }
+
+  /**
+   * A reply composed elsewhere (the VS Code extension's reply box). It goes through the same
+   * delivery as one typed in the overlay: it waits while the agent is busy, never sends into a
+   * dialog, and shows its progress in the terminal.
+   */
+  remoteReply(quote: string, reply: string): RemoteResult {
+    if (this.exited || this.mode !== 'passthrough' || this.hasKeptReply) return 'busy';
+    const cleanedQuote = cleanQuote(sanitize(quote), this.model.cols);
+    const cleanedReply = sanitize(reply).trim();
+    if (cleanedQuote === '' || cleanedReply === '') return 'invalid';
+    this.quote = cleanedQuote;
+    this.composer = new Composer();
+    this.composer.text = cleanedReply;
+    this.hasKeptReply = true;
+    void this.openOverlay();
+    return 'accepted';
   }
 
   // ---- Agent to terminal ------------------------------------------------------------------
@@ -278,7 +329,39 @@ export class Session {
     this.beginComposing(clean);
   }
 
+  /**
+   * The clipboard's text, if it is a fresh copy of something the agent wrote. A terminal's own
+   * selection can't be read by programs, but a copy of it can. The clipboard is read only on the
+   * hotkey, and used only if its text appears in the agent's output, so unrelated clipboard
+   * contents (a password, say) are never quoted. The same copy is not used twice in a row, so a
+   * stale clipboard doesn't keep hijacking Alt+R.
+   */
+  private async copiedQuote(): Promise<string | null> {
+    const text = await this.readClipboard().catch(() => null);
+    if (!text || text.length > MAX_CLIPBOARD_CHARS) return null;
+    const clean = sanitize(text);
+    const wanted = collapseSpace(clean);
+    if (wanted.length < MIN_CLIPBOARD_CHARS || wanted === this.lastClipboardQuote) return null;
+    // Copies are nearly always of recent output, so search the end first and widen only if needed.
+    // Reading a full 10,000-row history costs about 100 ms, too slow for every Alt+R.
+    const total = this.model.historyLength;
+    let history: string | null = null;
+    for (const rows of [this.model.rows + 300, 4000, total]) {
+      const text = this.model.historyText(total - rows);
+      if (collapseSpace(text).includes(wanted)) {
+        history = text;
+        break;
+      }
+      if (rows >= total) break;
+    }
+    if (history === null) return null;
+    this.lastClipboardQuote = wanted;
+    const { text: restored, startsMidLine } = restoreCopyContext(history, clean);
+    return cleanQuote(restored, this.model.cols, startsMidLine) || null;
+  }
+
   private beginComposing(quote: string): void {
+    this.quoteFromClipboard = false;
     this.quote = quote;
     this.composer = new Composer();
     this.status = undefined;
@@ -304,6 +387,16 @@ export class Session {
       case 'escape':
         void this.cancel();
         return;
+      case 'tab':
+        if (this.quoteFromClipboard) {
+          // The copied text was not what the user wanted to reply to; let them pick by hand.
+          this.quoteFromClipboard = false;
+          this.mode = 'selecting';
+          this.status = ' Select the passage to reply to, then press Enter.';
+          this.paint();
+          return;
+        }
+        break;
       case 'enter':
         if (key.alt || key.shift) c.insert('\n');
         else {
@@ -371,7 +464,14 @@ export class Session {
       snapshot.cols,
       snapshot.screenTop,
     );
+    // Like ChatGPT: if you selected and copied part of the agent's output, reply to it directly.
+    const copied = resuming ? null : await this.copiedQuote();
+    if (this.exited) return;
     this.out(enterOverlay(snapshot.alternate));
+    if (copied) {
+      this.beginComposing(copied);
+      this.quoteFromClipboard = true;
+    }
     this.paint();
     if (resuming) await this.beginSending();
     const early = this.earlyTokens;
@@ -667,7 +767,7 @@ export class Session {
   }
 
   private helpText(): string {
-    if (this.mode !== 'sending') return COMPOSE_HELP;
+    if (this.mode !== 'sending') return this.quoteFromClipboard ? COMPOSE_FROM_CLIPBOARD_HELP : COMPOSE_HELP;
     if (this.alarmed) return 'Esc: Back to agent';
     return this.allowsManualInsert() ? SENDING_MANUAL_HELP : SENDING_HELP;
   }

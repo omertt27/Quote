@@ -73,10 +73,10 @@ permission prompt. The sequence is:
 4. After the screen settles and the box still holds the paste, send Enter. Then confirm that the box
    emptied.
 
-The quote is untrusted text, and none of it is ever executed. The message opens with a fixed
-sentence, so neither the quote nor the reply can begin with `/` (a slash command) or `!` (a shell
-command). The quote is wrapped in `<quoted-output>` tags, any closing tag inside it is escaped, and
-the agent is told to treat the quote as data.
+The quote is untrusted text, and none of it is ever executed. It is sent as a Markdown blockquote
+with `> ` on every line, followed by the reply, as ChatGPT shows a reply to selected text. The
+message therefore always starts with `>`, never with `/` (a slash command) or `!` (a shell
+command), and quoted lines can't pass as the user's words.
 
 ## Hardest risks
 

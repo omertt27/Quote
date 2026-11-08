@@ -57,9 +57,23 @@ function stripChrome(line: string): string {
   return (indent + line.slice(prefix.length)).replace(TRAILING_CHROME, '');
 }
 
-function dedent(lines: string[]): string[] {
+function minIndent(lines: string[]): number {
   const indents = lines.filter((l) => l.trim() !== '').map((l) => l.length - l.trimStart().length);
-  const min = indents.length > 0 ? Math.min(...indents) : 0;
+  return indents.length > 0 ? Math.min(...indents) : 0;
+}
+
+/**
+ * Removes shared indentation. A selection that starts mid-line has a first line with no indent of
+ * its own, while the rest keep the screen's indent. Then the rest are dedented by their shared
+ * indent. Otherwise everything is dedented together, which keeps a list item's hanging indent.
+ */
+function dedent(lines: string[], startsMidLine: boolean): string[] {
+  const [first = '', ...rest] = lines;
+  if (startsMidLine && rest.length > 0) {
+    const restMin = minIndent(rest);
+    return [first.trimStart(), ...rest.map((l) => l.slice(restMin))];
+  }
+  const min = minIndent(lines);
   return lines.map((l) => l.slice(min));
 }
 
@@ -94,10 +108,13 @@ function reflow(lines: string[], cols: number): string[] {
   return out;
 }
 
-/** Turns raw screen text into what the agent actually said. */
-export function cleanQuote(raw: string, cols: number): string {
+/**
+ * Turns raw screen text into what the agent actually said. `startsMidLine` means the first line
+ * began after other text on its screen row.
+ */
+export function cleanQuote(raw: string, cols: number, startsMidLine = false): string {
   const lines = raw.split('\n').map(stripChrome);
-  const unwrapped = reflow(dedent(lines), cols);
+  const unwrapped = reflow(dedent(lines, startsMidLine), cols);
   return unwrapped
     .join('\n')
     .replace(/[ \t]+$/gm, '')

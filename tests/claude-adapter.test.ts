@@ -2,10 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { inspectClaude, isOwnClaudeDraft } from '../src/adapters/claude/index.js';
 
 describe('draft ownership', () => {
-  const message = 'I am replying to this excerpt from your earlier output.\n<quoted-output>…';
+  const message = '> The runtime should fail open when the\n> policy server becomes unavailable.\n\nWhy?';
   it('accepts the paste placeholder or the start of our message', () => {
-    expect(isOwnClaudeDraft('[Pasted text #1 +8 lines]', message)).toBe(true);
-    expect(isOwnClaudeDraft('I am replying to this excerpt from your', message)).toBe(true);
+    expect(isOwnClaudeDraft('[Pasted text #1 +4 lines]', message)).toBe(true);
+    expect(isOwnClaudeDraft('> The runtime should fail open when the > policy', message)).toBe(true);
   });
   it('rejects anything else', () => {
     expect(isOwnClaudeDraft('half-written thought', message)).toBe(false);
@@ -33,6 +33,24 @@ describe('Claude Code screen inspection', () => {
 
   it('reports busy while Claude works', async () => {
     expect(await stateOf(['✻ Thinking… (esc to interrupt)', RULE, '❯ ', RULE])).toBe('busy');
+  });
+
+  it('reports busy from the 2.1.319 spinner line, which has no "esc to interrupt"', async () => {
+    // Captured from a real session in the real-Claude test run.
+    const screen = [
+      '✳ Cooking… (2s · thinking)',
+      '  ⎿  Tip: Use /statusline to set up a custom status line',
+      '                                              ◐ medium · /effort',
+      RULE,
+      '❯ ',
+      RULE,
+      '  paste again to expand',
+    ];
+    expect(await stateOf(screen)).toBe('busy');
+  });
+
+  it('is ready once the turn is done', async () => {
+    expect(await stateOf(['✻ Sautéed for 3s · done 11:53 AM', '', RULE, '❯ ', RULE])).toBe('ready');
   });
 
   it('blocks on a permission dialog', async () => {
