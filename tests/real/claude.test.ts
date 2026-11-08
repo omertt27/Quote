@@ -4,7 +4,7 @@
  *
  *   npm run build && npm run test:real
  *
- * Every failure prints Claude's screen and AgentQuote's view of it. Nothing here changes your
+ * Every failure prints Claude's screen and Quote's view of it. Nothing here changes your
  * settings: the permission mode and rules are passed for this run only, on the command line.
  */
 import { execFileSync } from 'node:child_process';
@@ -17,8 +17,8 @@ import { type AgentProcess, findExecutable, spawnPty } from '../../src/terminal/
 import { rowText } from '../../src/terminal/screen.js';
 import { findRow, sleep, waitUntil } from '../helpers.js';
 
-const bin = process.env.AGENTQUOTE_CLAUDE_BIN || findExecutable('claude');
-const model = process.env.AGENTQUOTE_REAL_MODEL ?? 'haiku';
+const bin = process.env.QUOTE_CLAUDE_BIN || findExecutable('claude');
+const model = process.env.QUOTE_REAL_MODEL ?? 'haiku';
 const TURN_MS = 180_000;
 /**
  * Marker files go in the project folder, which Claude (sandboxed or not) can write to. Otherwise a

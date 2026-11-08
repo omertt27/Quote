@@ -42,7 +42,7 @@ describe('composeMessage', () => {
 
   it('truncates very long quotes', () => {
     const message = composeMessage({ quote: 'a'.repeat(MAX_QUOTE_CHARS + 500), reply: 'ok' });
-    expect(message).toContain('> [… truncated by AgentQuote]');
+    expect(message).toContain('> [… truncated by Quote]');
     expect(message.length).toBeLessThan(MAX_QUOTE_CHARS + 500);
   });
 

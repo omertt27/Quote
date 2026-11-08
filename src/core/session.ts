@@ -45,7 +45,7 @@ const MAX_QUEUED_BYTES = 8 * 1024 * 1024;
 const POLL_MS = 25;
 
 const SELECT_HELP =
-  ' AgentQuote · drag or Shift+arrows to select · p paragraph · v mark · c clipboard · Enter reply · Esc cancel';
+  ' Quote · drag or Shift+arrows to select · p paragraph · v mark · c clipboard · Enter reply · Esc cancel';
 const COMPOSE_HELP = 'Enter: Send    Alt+Enter: Newline    Esc: Cancel';
 const COMPOSE_FROM_CLIPBOARD_HELP = 'Enter: Send    Esc: Cancel    Tab: Quote something else (quoted from your copy)';
 /** Shorter copies are too ambiguous to match against the transcript. */

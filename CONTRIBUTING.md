@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for helping. AgentQuote is small on purpose, so keep changes focused.
+Thanks for helping. Quote is small on purpose, so keep changes focused.
 
 ## Setup
 
@@ -16,7 +16,7 @@ and containers. The other end-to-end tests run the real `Session` against
 `examples/mock-agent.mjs` over pipes, so they work everywhere.
 
 If `npm install` leaves node-pty's `spawn-helper` without its execute bit, the first spawn fails
-with `posix_spawnp failed`. AgentQuote repairs the bit at runtime.
+with `posix_spawnp failed`. Quote repairs the bit at runtime.
 
 ## Ground rules
 

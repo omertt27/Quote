@@ -23,6 +23,6 @@ export interface Adapter {
    * positive evidence of an empty input box, never because no dialog was recognised.
    */
   inspect(rows: readonly Row[]): Readiness;
-  /** True when a draft's visible text is the message AgentQuote pasted, not something else. */
+  /** True when a draft's visible text is the message Quote pasted, not something else. */
   isOwnDraft(draft: string, message: string): boolean;
 }

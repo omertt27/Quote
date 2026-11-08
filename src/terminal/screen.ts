@@ -5,7 +5,7 @@ const require = createRequire(import.meta.url);
 const { Terminal } = require('@xterm/headless') as typeof import('@xterm/headless');
 const { Unicode11Addon } = require('@xterm/addon-unicode11') as typeof import('@xterm/addon-unicode11');
 
-/** Rows of history kept for selection. Override with AGENTQUOTE_SCROLLBACK. */
+/** Rows of history kept for selection. Override with QUOTE_SCROLLBACK. */
 export const DEFAULT_SCROLLBACK = 10_000;
 
 export interface Cell {

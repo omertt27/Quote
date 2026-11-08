@@ -20,7 +20,7 @@ if (agent !== 'codex') {
   console.error('Only codex is scripted so far.');
   process.exit(1);
 }
-const bin = process.env.AGENTQUOTE_CODEX_BIN || findExecutable('codex');
+const bin = process.env.QUOTE_CODEX_BIN || findExecutable('codex');
 if (!bin) {
   console.error('codex was not found on PATH.');
   process.exit(1);

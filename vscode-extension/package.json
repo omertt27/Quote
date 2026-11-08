@@ -1,9 +1,9 @@
 {
-  "name": "agentquote-vscode",
-  "displayName": "AgentQuote",
+  "name": "quote-vscode",
+  "displayName": "Quote",
   "description": "Select text in a Claude Code terminal and click Quote to reply to it, like ChatGPT.",
   "version": "0.1.0",
-  "publisher": "agentquote",
+  "publisher": "quote",
   "license": "MIT",
   "engines": {
     "vscode": "^1.90.0"
@@ -16,31 +16,31 @@
   "contributes": {
     "commands": [
       {
-        "command": "agentquote.quoteSelection",
+        "command": "quote.quoteSelection",
         "title": "Quote in Reply",
-        "category": "AgentQuote",
+        "category": "Quote",
         "icon": "$(quote)"
       }
     ],
     "menus": {
       "view/title": [
         {
-          "command": "agentquote.quoteSelection",
+          "command": "quote.quoteSelection",
           "when": "view == terminal && (terminalTextSelectedInFocused || terminalTextSelected)",
           "group": "navigation@0"
         }
       ],
       "terminal/context": [
         {
-          "command": "agentquote.quoteSelection",
-          "group": "0_agentquote"
+          "command": "quote.quoteSelection",
+          "group": "0_quote"
         }
       ]
     },
     "configuration": {
-      "title": "AgentQuote",
+      "title": "Quote",
       "properties": {
-        "agentquote.agentProcesses": {
+        "quote.agentProcesses": {
           "type": "array",
           "items": {
             "type": "string"
@@ -50,7 +50,7 @@
             "codex",
             "opencode"
           ],
-          "description": "Process names AgentQuote may insert quotes into. Quotes are never inserted into a terminal that isn't running one of these."
+          "description": "Process names Quote may insert quotes into. Quotes are never inserted into a terminal that isn't running one of these."
         }
       }
     }

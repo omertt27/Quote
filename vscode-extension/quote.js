@@ -1,7 +1,7 @@
 'use strict';
 /**
  * Pure helpers for the VS Code extension: turning a terminal selection into a quote, building the
- * reply message, finding the agent in a terminal, and talking to an AgentQuote session. No VS Code
+ * reply message, finding the agent in a terminal, and talking to a Quote session. No VS Code
  * API here, so all of it can be unit tested.
  */
 const net = require('node:net');
@@ -73,7 +73,7 @@ function formatQuote(selection) {
   return `${quoted}\n\n`;
 }
 
-/** The full message: the quote as a blockquote, then the reply. The same format AgentQuote sends. */
+/** The full message: the quote as a blockquote, then the reply. The same format Quote sends. */
 function composeMessage(selection, reply) {
   return `${formatQuote(selection)}${sanitize(reply).trim()}`;
 }
@@ -117,17 +117,17 @@ function agentName(args, agentNames) {
   return agentNames.includes(base) ? base : null;
 }
 
-/** AgentQuote's own CLI, installed (`agentquote`) or run from a checkout (`node …/dist/cli/main.js`). */
-function isAgentQuote(args) {
+/** Quote's own CLI, installed (`quote`) or run from a checkout (`node …/dist/cli/main.js`). */
+function isQuote(args) {
   const { base, firstArg } = commandParts(args);
-  if (base === 'agentquote') return true;
-  return isNode(base) && /(?:^|\/)(?:agentquote|dist\/cli\/main\.js)$/.test(firstArg);
+  if (base === 'quote') return true;
+  return isNode(base) && /(?:^|\/)(?:quote|dist\/cli\/main\.js)$/.test(firstArg);
 }
 
 /**
  * The coding agent running under `rootPid` (the terminal's shell), from `ps -A -o pid=,ppid=,args=`
- * output: `{ name, agentQuotePid }`, or null. `agentQuotePid` is set when the agent runs under
- * AgentQuote, which can then deliver replies safely. A quote starts with `>`, which a plain shell
+ * output: `{ name, quotePid }`, or null. `quotePid` is set when the agent runs under
+ * Quote, which can then deliver replies safely. A quote starts with `>`, which a plain shell
  * would treat as a redirect, so nothing is ever inserted into a terminal with no agent.
  */
 function findAgent(psOutput, rootPid, agentNames) {
@@ -138,27 +138,27 @@ function findAgent(psOutput, rootPid, agentNames) {
     if (!match) continue;
     const pid = Number(match[1]);
     const ppid = Number(match[2]);
-    info.set(pid, { agent: agentName(match[3], agentNames), wrapper: isAgentQuote(match[3]) });
+    info.set(pid, { agent: agentName(match[3], agentNames), wrapper: isQuote(match[3]) });
     if (!children.has(ppid)) children.set(ppid, []);
     children.get(ppid).push(pid);
   }
-  const queue = (children.get(rootPid) ?? []).map((pid) => ({ pid, agentQuotePid: null }));
+  const queue = (children.get(rootPid) ?? []).map((pid) => ({ pid, quotePid: null }));
   const seen = new Set();
   while (queue.length > 0) {
-    const { pid, agentQuotePid } = queue.shift();
+    const { pid, quotePid } = queue.shift();
     if (seen.has(pid)) continue;
     seen.add(pid);
     const node = info.get(pid);
-    const wrapperPid = node?.wrapper ? pid : agentQuotePid;
-    if (node?.agent) return { name: node.agent, agentQuotePid: wrapperPid };
-    for (const child of children.get(pid) ?? []) queue.push({ pid: child, agentQuotePid: wrapperPid });
+    const wrapperPid = node?.wrapper ? pid : quotePid;
+    if (node?.agent) return { name: node.agent, quotePid: wrapperPid };
+    for (const child of children.get(pid) ?? []) queue.push({ pid: child, quotePid: wrapperPid });
   }
   return null;
 }
 
-/** Must match AgentQuote's own `socketPathFor`: a socket file, or a named pipe on Windows. */
+/** Must match Quote's own `socketPathFor`: a socket file, or a named pipe on Windows. */
 function socketPathFor(pid, dir = os.tmpdir(), platform = process.platform) {
-  return platform === 'win32' ? `\\\\.\\pipe\\agentquote-${pid}` : path.join(dir, `agentquote-${pid}.sock`);
+  return platform === 'win32' ? `\\\\.\\pipe\\quote-${pid}` : path.join(dir, `quote-${pid}.sock`);
 }
 
 /**
@@ -172,8 +172,8 @@ function processListCommand(platform = process.platform) {
   return ['powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script]];
 }
 
-/** Hands a reply to an AgentQuote session. Resolves with `{ ok, message }`. */
-function sendToAgentQuote(socketPath, quote, reply, timeoutMs = 3000) {
+/** Hands a reply to a Quote session. Resolves with `{ ok, message }`. */
+function sendToQuote(socketPath, quote, reply, timeoutMs = 3000) {
   return new Promise((resolve) => {
     const conn = net.createConnection(socketPath);
     let answer = '';
@@ -181,7 +181,7 @@ function sendToAgentQuote(socketPath, quote, reply, timeoutMs = 3000) {
       conn.destroy();
       resolve(result);
     };
-    conn.setTimeout(timeoutMs, () => done({ ok: false, message: 'AgentQuote did not answer.' }));
+    conn.setTimeout(timeoutMs, () => done({ ok: false, message: 'Quote did not answer.' }));
     conn.setEncoding('utf8');
     conn.on('connect', () => conn.write(`${JSON.stringify({ type: 'reply', quote, reply })}\n`));
     conn.on('data', (chunk) => {
@@ -190,10 +190,10 @@ function sendToAgentQuote(socketPath, quote, reply, timeoutMs = 3000) {
       try {
         done(JSON.parse(answer));
       } catch {
-        done({ ok: false, message: 'AgentQuote sent an unreadable answer.' });
+        done({ ok: false, message: 'Quote sent an unreadable answer.' });
       }
     });
-    conn.on('error', (error) => done({ ok: false, message: `Could not reach AgentQuote (${error.code ?? error.message}).` }));
+    conn.on('error', (error) => done({ ok: false, message: `Could not reach Quote (${error.code ?? error.message}).` }));
   });
 }
 
@@ -207,5 +207,5 @@ module.exports = {
   findAgent,
   socketPathFor,
   processListCommand,
-  sendToAgentQuote,
+  sendToQuote,
 };

@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 /**
- * A local socket that lets the VS Code extension hand a quoted reply to this AgentQuote session,
+ * A local socket that lets the VS Code extension hand a quoted reply to this Quote session,
  * which then delivers it with all of its usual safety checks. Only the user's own processes can
  * connect: the socket lives in the per-user temp directory with mode 0600. It accepts one kind of
  * request and never runs anything.
@@ -24,14 +24,14 @@ const MAX_REQUEST_BYTES = 1_000_000;
  * other ordinary users can't send one.
  */
 export function socketPathFor(pid = process.pid, dir = tmpdir(), platform: NodeJS.Platform = process.platform): string {
-  return platform === 'win32' ? `\\\\.\\pipe\\agentquote-${pid}` : join(dir, `agentquote-${pid}.sock`);
+  return platform === 'win32' ? `\\\\.\\pipe\\quote-${pid}` : join(dir, `quote-${pid}.sock`);
 }
 
 const isPipe = (path: string) => path.startsWith('\\\\.\\pipe\\');
 
 const MESSAGES: Record<RemoteResult, string> = {
-  accepted: 'Sending. AgentQuote shows progress in the terminal.',
-  busy: 'AgentQuote is already showing a reply or selection in that terminal. Finish or cancel it first.',
+  accepted: 'Sending. Quote shows progress in the terminal.',
+  busy: 'Quote is already showing a reply or selection in that terminal. Finish or cancel it first.',
   invalid: 'Both the quote and the reply must contain text.',
 };
 

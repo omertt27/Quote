@@ -1,6 +1,6 @@
 # Security model
 
-AgentQuote types into a running coding agent that can edit files and run commands. The things that
+Quote types into a running coding agent that can edit files and run commands. The things that
 must never happen are: a keystroke approving a permission prompt, and quoted text being run as a
 command.
 
@@ -15,7 +15,7 @@ command.
 - A blockquote marks the text as quoted, the way ChatGPT does. It can't guarantee a model won't
   follow instructions in quoted text, just as it can't when the user pastes text by hand. The
   agent's own permission checks still apply to anything the model then tries to do.
-- AgentQuote never runs anything itself, and has no shell, network, or file access in its delivery
+- Quote never runs anything itself, and has no shell, network, or file access in its delivery
   path.
 
 ## Delivery sequence
@@ -33,14 +33,14 @@ The adapter fails closed. Any screen it doesn't positively recognise as an empty
 ## The race no screen check can close
 
 A check reads output the agent has *already written*. Between the agent changing state and its
-output reaching AgentQuote there is a gap of about one render frame. A dialog that appears in that
+output reaching Quote there is a gap of about one render frame. A dialog that appears in that
 gap can receive the paste (step 1) or the Enter (step 3).
 
 - **In practice:** while Claude sits idle at an empty prompt, nothing in the main conversation can
   open a permission dialog. Only work running in the background, such as background agents or
   tasks, could do so at that exact moment.
 - **Enter lands on a dialog:** step 4 sees that the reply was not submitted (our draft is still in
-  the box), or sees the dialog on consecutive polls. AgentQuote then stops, shows
+  the box), or sees the dialog on consecutive polls. Quote then stops, shows
   `⚠ Enter did not submit your reply… check Claude now`, and discards the reply so it can't be sent
   twice. It cannot undo a dialog answer, so it tells the user immediately instead of reporting
   success. The mock agent's `MOCK_DIALOG_ON_ENTER` mode tests exactly this.
@@ -56,6 +56,6 @@ Closing this race fully needs a submission API from the agent. Codex (`codex que
 ## Other properties
 
 - No network access, telemetry, or disk writes. Screen contents live in memory only.
-- The agent runs with the user's own permissions and settings. AgentQuote adds no flags.
-- If AgentQuote crashes, it resets the terminal modes and kills the agent rather than leaving a raw
+- The agent runs with the user's own permissions and settings. Quote adds no flags.
+- If Quote crashes, it resets the terminal modes and kills the agent rather than leaving a raw
   terminal behind.

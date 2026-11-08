@@ -8,7 +8,7 @@ export interface ExitInfo {
   signal?: number | string;
 }
 
-/** The one boundary between AgentQuote and the agent's process. */
+/** The one boundary between Quote and the agent's process. */
 export interface AgentProcess {
   readonly pid: number;
   onData(listener: (data: string) => void): void;

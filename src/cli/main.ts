@@ -4,14 +4,17 @@ import { socketPathFor, startReplyServer, stopReplyServer } from '../core/remote
 import { Session } from '../core/session.js';
 import { readClipboard } from '../terminal/clipboard.js';
 import { type AgentProcess, PtyUnavailableError, findExecutable, spawnPty } from '../terminal/process.js';
+import { offerSetupOnce, runSetup } from './setup.js';
 
 const VERSION = '0.1.0';
 const KILL_GRACE_MS = 1500;
 
-const USAGE = `AgentQuote ${VERSION}: quote part of an agent's output and reply in the same session.
+const USAGE = `Quote ${VERSION}: quote part of an agent's output and reply in the same session.
 
 Usage:
-  agentquote claude [args...]    Run Claude Code. Arguments go to it unchanged.
+  quote claude [args...]    Run Claude Code. Arguments go to it unchanged.
+  quote setup               Make plain "claude" run through Quote (adds a shell alias).
+  quote setup --remove      Undo that.
 
 While it runs, press Alt+R to select a passage and reply.
 
@@ -23,7 +26,7 @@ Options:
 const SIGNAL_NUMBERS: Record<string, number> = { SIGHUP: 1, SIGINT: 2, SIGTERM: 15 };
 
 function fail(message: string): never {
-  process.stderr.write(`agentquote: ${message}\n`);
+  process.stderr.write(`quote: ${message}\n`);
   process.exit(1);
 }
 
@@ -31,7 +34,7 @@ function parseScrollback(value: string | undefined): number | undefined {
   if (value === undefined || value === '') return undefined;
   const rows = Number(value);
   if (!Number.isInteger(rows) || rows < 100 || rows > 1_000_000) {
-    fail('AGENTQUOTE_SCROLLBACK must be a whole number of rows between 100 and 1000000.');
+    fail('QUOTE_SCROLLBACK must be a whole number of rows between 100 and 1000000.');
   }
   return rows;
 }
@@ -50,9 +53,12 @@ async function main(): Promise<void> {
     process.stdout.write(`${VERSION}\n`);
     return;
   }
+  if (target === 'setup') {
+    process.exit(await runSetup(agentArgs));
+  }
 
   const adapter = adapters[target];
-  if (!adapter) fail(`unknown agent "${target}". Run "agentquote --help".`);
+  if (!adapter) fail(`unknown agent "${target}". Run "quote --help".`);
   if (!adapter.supported) {
     fail(`${adapter.label} is not supported yet. Only Claude Code has a tested adapter.`);
   }
@@ -60,9 +66,11 @@ async function main(): Promise<void> {
     fail('stdin and stdout must be a terminal.');
   }
 
-  const override = process.env[`AGENTQUOTE_${adapter.id.toUpperCase()}_BIN`];
+  const override = process.env[`QUOTE_${adapter.id.toUpperCase()}_BIN`];
   const file = override || findExecutable(adapter.executable);
   if (!file) fail(`"${adapter.executable}" was not found on PATH. Install it first.`);
+
+  await offerSetupOnce();
 
   const cols = process.stdout.columns;
   const rows = process.stdout.rows;
@@ -79,7 +87,7 @@ async function main(): Promise<void> {
     cols,
     rows,
     readClipboard,
-    scrollback: parseScrollback(process.env.AGENTQUOTE_SCROLLBACK),
+    scrollback: parseScrollback(process.env.QUOTE_SCROLLBACK),
     write: (data) => void process.stdout.write(data),
   });
 
@@ -94,13 +102,13 @@ async function main(): Promise<void> {
   const restoreRawMode = () => {
     if (process.stdin.isTTY) process.stdin.setRawMode(false);
   };
-  // If AgentQuote itself breaks, leave a usable shell behind rather than a raw one.
+  // If Quote itself breaks, leave a usable shell behind rather than a raw one.
   process.on('uncaughtException', (error) => {
     process.stdout.write('\x1b[?1002l\x1b[?1006l\x1b[?2004l\x1b[?25h\x1b[?1049l');
     stopServer();
     restoreRawMode();
     proc.kill('SIGKILL');
-    process.stderr.write(`agentquote: internal error: ${error.stack ?? String(error)}\n`);
+    process.stderr.write(`quote: internal error: ${error.stack ?? String(error)}\n`);
     process.exit(70);
   });
 

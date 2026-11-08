@@ -5,7 +5,7 @@
 
 export const MAX_QUOTE_CHARS = 20_000;
 
-const TRUNCATION_NOTICE = '[… truncated by AgentQuote]';
+const TRUNCATION_NOTICE = '[… truncated by Quote]';
 
 /**
  * Removes everything that could act on a terminal or an input handler: C0 and C1 controls (ESC

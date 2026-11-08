@@ -39,7 +39,7 @@ quote test couldn't have caught an executed command.
   was never created, so a quoted `!touch` line was delivered as text and not run.
 - **Permission dialog: ✓** (16 s). Bash in the project is auto-approved by Claude's sandbox even in
   manual mode, so the test now uses a file write, which always prompts. With Claude's "Do you want
-  to create…?" dialog open, AgentQuote held the reply for 6 s, with the status
+  to create…?" dialog open, Quote held the reply for 6 s, with the status
   "waiting for your answer". The file was not created. After the dialog was declined, Alt+R
   delivered the kept reply, and the file was still not created.
 
@@ -80,7 +80,7 @@ quoted text (marker file must not appear), and long-conversation scrollback with
    requires the box to empty or the agent to start working, and anything else raises an alarm.
 2. **The paste was not re-checked right before writing.** It now waits for the screen model to
    catch up, then re-checks in the same tick as the write.
-3. **Enter accepted any draft.** It now requires the draft to be AgentQuote's own paste.
+3. **Enter accepted any draft.** It now requires the draft to be Quote's own paste.
 4. **Numbered transcript lists read as dialogs** whenever the input box was briefly absent
    mid-redraw. This caused false alarms. A dialog now needs a `❯`-highlighted option, seen on two
    consecutive polls.

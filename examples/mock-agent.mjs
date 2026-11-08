@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 /**
  * A small interactive agent for tests and demos. It needs no account and makes no network calls.
- * It keeps one conversation in memory and mimics the terminal behaviour AgentQuote relies on in
+ * It keeps one conversation in memory and mimics the terminal behaviour Quote relies on in
  * Claude Code: a ruled input box, a dim placeholder, bracketed paste with collapsed multi-line
  * pastes, a busy indicator, and permission dialogs that replace the input box.
  *
- * Try it: AGENTQUOTE_CLAUDE_BIN=examples/mock-agent.mjs agentquote claude
+ * Try it: QUOTE_CLAUDE_BIN=examples/mock-agent.mjs quote claude
  *
  * Commands: /perm, /perm-odd, /busy <ms>, /alt, /weird, /long, /say a|b, /quit, /crash
  * A message starting with `!` is run as a "shell command" (logged, never executed), and an

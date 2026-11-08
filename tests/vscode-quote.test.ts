@@ -12,8 +12,8 @@ const q = require('../vscode-extension/quote.js') as {
   composeMessage: (s: string, r: string) => string;
   quotePreview: (s: string, max?: number) => string;
   asPaste: (s: string) => string;
-  findAgent: (ps: string, root: number, names: string[]) => { name: string; agentQuotePid: number | null } | null;
-  sendToAgentQuote: (path: string, quote: string, reply: string) => Promise<{ ok: boolean; message: string }>;
+  findAgent: (ps: string, root: number, names: string[]) => { name: string; quotePid: number | null } | null;
+  sendToQuote: (path: string, quote: string, reply: string) => Promise<{ ok: boolean; message: string }>;
 };
 
 describe('VS Code extension: quote formatting', () => {
@@ -32,7 +32,7 @@ describe('VS Code extension: quote formatting', () => {
     expect(q.formatQuote('  2. The runtime should\n     fail open')).toBe('> 2. The runtime should\n>    fail open\n\n');
   });
 
-  it('builds the same message format AgentQuote sends', () => {
+  it('builds the same message format Quote sends', () => {
     expect(q.composeMessage('refactor', ' what do you mean? ')).toBe('> refactor\n\nwhat do you mean?');
   });
 
@@ -55,33 +55,33 @@ describe('VS Code extension: quote formatting', () => {
 describe('VS Code extension: finding the agent', () => {
   const ps = [
     '  100     1 -zsh',
-    '  200   100 node /Users/omer/Desktop/agentQuote/dist/cli/main.js claude',
+    '  200   100 node /Users/omer/Desktop/quote/dist/cli/main.js claude',
     '  300   200 /Users/omer/.local/share/claude/versions/2.1.319 --model haiku',
     '  400     1 -zsh',
     '  500   400 claude',
     '  600     1 -zsh',
     '  700   600 vim notes.md',
     '  800     1 -zsh',
-    '  810   800 agentquote claude',
+    '  810   800 quote claude',
     '  820   810 claude --resume',
     '  900     1 -zsh',
     '  910   900 /opt/homebrew/bin/codex --no-alt-screen',
   ].join('\n');
 
-  it('finds plain Claude, with no AgentQuote to deliver through', () => {
-    expect(q.findAgent(ps, 400, ['claude'])).toEqual({ name: 'claude', agentQuotePid: null });
+  it('finds plain Claude, with no Quote to deliver through', () => {
+    expect(q.findAgent(ps, 400, ['claude'])).toEqual({ name: 'claude', quotePid: null });
   });
 
-  it('finds Claude under AgentQuote run from a checkout, and its versioned binary', () => {
-    expect(q.findAgent(ps, 100, ['claude'])).toEqual({ name: 'claude', agentQuotePid: 200 });
+  it('finds Claude under Quote run from a checkout, and its versioned binary', () => {
+    expect(q.findAgent(ps, 100, ['claude'])).toEqual({ name: 'claude', quotePid: 200 });
   });
 
-  it('finds Claude under an installed agentquote', () => {
-    expect(q.findAgent(ps, 800, ['claude'])).toEqual({ name: 'claude', agentQuotePid: 810 });
+  it('finds Claude under an installed quote', () => {
+    expect(q.findAgent(ps, 800, ['claude'])).toEqual({ name: 'claude', quotePid: 810 });
   });
 
   it('finds other agents the user allows, and only those', () => {
-    expect(q.findAgent(ps, 900, ['claude', 'codex'])).toEqual({ name: 'codex', agentQuotePid: null });
+    expect(q.findAgent(ps, 900, ['claude', 'codex'])).toEqual({ name: 'codex', quotePid: null });
     expect(q.findAgent(ps, 900, ['claude'])).toBeNull();
   });
 
@@ -142,7 +142,7 @@ describe('reply requests (without a socket)', () => {
   });
 });
 
-describe.skipIf(!hasSockets)('VS Code reply box → AgentQuote session, over the socket', () => {
+describe.skipIf(!hasSockets)('VS Code reply box → Quote session, over the socket', () => {
   let harness: Harness | null = null;
   let stop: (() => void) | null = null;
   afterEach(async () => {
@@ -162,7 +162,7 @@ describe.skipIf(!hasSockets)('VS Code reply box → AgentQuote session, over the
 
   it('delivers a reply from the reply box to the running session', async () => {
     const { h, socket } = await connected();
-    const result = await q.sendToAgentQuote(socket, 'They let you refactor safely.', 'what do you mean?');
+    const result = await q.sendToQuote(socket, 'They let you refactor safely.', 'what do you mean?');
     expect(result.ok).toBe(true);
     await waitUntil(() => h.messages().length === 1, 4000, 'delivery');
     expect(h.messages()[0]!.message).toBe('> They let you refactor safely.\n\nwhat do you mean?');
@@ -172,7 +172,7 @@ describe.skipIf(!hasSockets)('VS Code reply box → AgentQuote session, over the
   it('does not send into a permission dialog; it waits, as replies typed in the overlay do', async () => {
     const { h, socket } = await connected();
     await h.say('/perm');
-    const result = await q.sendToAgentQuote(socket, 'refactor', 'explain');
+    const result = await q.sendToQuote(socket, 'refactor', 'explain');
     expect(result.ok).toBe(true);
     await sleep(800);
     expect(h.events().filter((e) => ['paste', 'confirmed', 'message'].includes(e.type))).toEqual([]);
@@ -182,19 +182,19 @@ describe.skipIf(!hasSockets)('VS Code reply box → AgentQuote session, over the
   it('refuses a second reply while one is in progress, and empty replies', async () => {
     const { h, socket } = await connected();
     await h.say('/perm');
-    expect((await q.sendToAgentQuote(socket, 'a quote', 'first')).ok).toBe(true);
-    const second = await q.sendToAgentQuote(socket, 'a quote', 'second');
+    expect((await q.sendToQuote(socket, 'a quote', 'first')).ok).toBe(true);
+    const second = await q.sendToQuote(socket, 'a quote', 'second');
     expect(second.ok).toBe(false);
     expect(second.message).toMatch(/already showing/);
-    expect((await q.sendToAgentQuote(socket, '   ', 'x')).ok).toBe(false);
+    expect((await q.sendToQuote(socket, '   ', 'x')).ok).toBe(false);
   });
 
 });
 
-describe('VS Code extension: no AgentQuote session', () => {
-  it('reports a clear error when no AgentQuote session is listening', async () => {
-    const result = await q.sendToAgentQuote(join(process.env.TMPDIR ?? tmpdir(), 'no-such-agentquote.sock'), 'a', 'b');
+describe('VS Code extension: no Quote session', () => {
+  it('reports a clear error when no Quote session is listening', async () => {
+    const result = await q.sendToQuote(join(process.env.TMPDIR ?? tmpdir(), 'no-such-quote.sock'), 'a', 'b');
     expect(result.ok).toBe(false);
-    expect(result.message).toMatch(/Could not reach AgentQuote/);
+    expect(result.message).toMatch(/Could not reach Quote/);
   });
 });

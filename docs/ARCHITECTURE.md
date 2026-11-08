@@ -1,6 +1,6 @@
 # Architecture
 
-## What already exists, and what AgentQuote adds
+## What already exists, and what Quote adds
 
 | Existing                           | What it does                                                                                       | Gap                                                                                       |
 | ---------------------------------- | -------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
@@ -11,7 +11,7 @@
 | Codex `codex queue`                | Queues a message for an existing thread                                                            | Codex only, and it needs a thread ID                                                      |
 | OpenCode server                    | `POST /tui/append-prompt` and `/tui/submit-prompt`                                                 | OpenCode only                                                                             |
 
-AgentQuote adds selection and a quoted reply that become **the next turn of the conversation you
+Quote adds selection and a quoted reply that become **the next turn of the conversation you
 are already having**. It makes no extra model calls, and the agent keeps its own permission
 checks.
 
@@ -19,18 +19,18 @@ checks.
 
 ## Options considered
 
-1. **A PTY wrapper with a managed selection view** (chosen). AgentQuote owns the terminal the
+1. **A PTY wrapper with a managed selection view** (chosen). Quote owns the terminal the
    agent writes to, so it can show its own copy of the screen. It does not depend on a particular
    terminal emulator or multiplexer, and it works the same on macOS and Linux.
 2. **tmux integration.** `tmux capture-pane` and copy mode can expose a selection, and
-   `send-keys` can deliver one. This needs tmux. AgentQuote's output capture would duplicate
+   `send-keys` can deliver one. This needs tmux. Quote's output capture would duplicate
    what tmux already does, so this fits better as a later add-on than as the core.
 3. **Agent plugins and APIs.** These are the most robust where they exist, as with OpenCode's HTTP
    API and `codex queue`. Claude Code has no supported way to add a turn to a running interactive
    session from outside. Its hooks can add context, but they cannot start a turn.
 4. **Native terminal selection.** A process cannot read the terminal's selection: it lives in the
    emulator. No escape sequence queries it, and OSC 52 clipboard reads are disabled by default in
-   most terminals. Claiming support would be false, so AgentQuote offers a clipboard fallback
+   most terminals. Claiming support would be false, so Quote offers a clipboard fallback
    (the `c` key) on an explicit keypress instead.
 
 The design is a shared core plus one adapter per agent, and an adapter can bring its own delivery
@@ -47,7 +47,7 @@ user's terminal ──stdin──▶ InputParser ──▶ Session ──(passth
 
 - **Passthrough** (the default): agent output goes to the terminal byte for byte, and keystrokes go
   to the agent. Each output byte is also parsed into an in-memory `ScreenModel` (headless xterm.js),
-  so AgentQuote always knows the screen, the scrollback, and the agent's terminal modes. The model
+  so Quote always knows the screen, the scrollback, and the agent's terminal modes. The model
   never answers terminal queries. The real terminal does, so the agent never gets duplicate
   responses.
 - **Alt+R** freezes a `Snapshot` and switches the real terminal to the alternate screen. Mouse
@@ -56,7 +56,7 @@ user's terminal ──stdin──▶ InputParser ──▶ Session ──(passth
   arrives meanwhile is still parsed into the model, and it is queued for display.
 - **On close**, the terminal returns to the agent's own modes, and queued output is replayed onto
   the main screen. That keeps scrollback complete. If the agent was itself on the alternate screen,
-  AgentQuote redraws it from the model instead.
+  Quote redraws it from the model instead.
 
 ## Delivery
 

@@ -1,6 +1,6 @@
 'use strict';
 /**
- * AgentQuote for VS Code: select text in a terminal running Claude Code (or Codex, OpenCode), click
+ * Quote for VS Code: select text in a terminal running Claude Code (or Codex, OpenCode), click
  * the quote button, and a reply box opens with the quote shown above your question, like ChatGPT.
  *
  * VS Code's stable API can't read a terminal's selection, so the command copies it with VS Code's
@@ -61,17 +61,17 @@ function askForReply(label, preview) {
 async function quoteSelection() {
   const terminal = vscode.window.activeTerminal;
   if (!terminal) {
-    vscode.window.showInformationMessage('AgentQuote: open a terminal running Claude Code first.');
+    vscode.window.showInformationMessage('Quote: open a terminal running Claude Code first.');
     return;
   }
 
-  const agents = vscode.workspace.getConfiguration('agentquote').get('agentProcesses', ['claude', 'codex', 'opencode']);
+  const agents = vscode.workspace.getConfiguration('quote').get('agentProcesses', ['claude', 'codex', 'opencode']);
   const pid = await terminal.processId;
   const ps = pid ? await listProcesses() : null;
   const found = ps ? q.findAgent(ps, pid, agents) : null;
   if (!found) {
     vscode.window.showWarningMessage(
-      'AgentQuote: this terminal is not running Claude Code, Codex or OpenCode, so nothing was inserted. ' +
+      'Quote: this terminal is not running Claude Code, Codex or OpenCode, so nothing was inserted. ' +
         'A quote starts with ">", which a plain shell would treat as a file redirect.',
     );
     return;
@@ -80,7 +80,7 @@ async function quoteSelection() {
   const selection = await readSelection();
   const preview = q.quotePreview(selection);
   if (preview === '') {
-    vscode.window.showInformationMessage('AgentQuote: select some text in the terminal first.');
+    vscode.window.showInformationMessage('Quote: select some text in the terminal first.');
     return;
   }
 
@@ -89,15 +89,15 @@ async function quoteSelection() {
   if (reply === null) return;
   terminal.show(false);
 
-  if (found.agentQuotePid) {
-    // AgentQuote can see the agent's screen, so it sends: it waits while the agent works and never
+  if (found.quotePid) {
+    // Quote can see the agent's screen, so it sends: it waits while the agent works and never
     // sends into a permission question.
-    const result = await q.sendToAgentQuote(q.socketPathFor(found.agentQuotePid), q.cleanSelection(selection), reply);
-    if (!result.ok) vscode.window.showWarningMessage(`AgentQuote: ${result.message}`);
+    const result = await q.sendToQuote(q.socketPathFor(found.quotePid), q.cleanSelection(selection), reply);
+    if (!result.ok) vscode.window.showWarningMessage(`Quote: ${result.message}`);
     return;
   }
 
-  // Without AgentQuote, this extension can't see whether the agent is asking a question, and an
+  // Without Quote, this extension can't see whether the agent is asking a question, and an
   // Enter would answer it. So the message goes into the agent's input and the user presses Enter.
   terminal.sendText(q.asPaste(q.composeMessage(selection, reply)), false);
   vscode.window.setStatusBarMessage(
@@ -107,7 +107,7 @@ async function quoteSelection() {
 }
 
 function activate(context) {
-  context.subscriptions.push(vscode.commands.registerCommand('agentquote.quoteSelection', quoteSelection));
+  context.subscriptions.push(vscode.commands.registerCommand('quote.quoteSelection', quoteSelection));
 }
 
 function deactivate() {}

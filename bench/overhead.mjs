@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Measures what AgentQuote adds on top of the agent: keystroke and output latency, parsing cost,
+ * Measures what Quote adds on top of the agent: keystroke and output latency, parsing cost,
  * event-loop delay under heavy output, and memory at full scrollback. Run after `npm run build`:
  *
  *   node --expose-gc bench/overhead.mjs
@@ -130,7 +130,7 @@ async function memory(scrollback) {
   session.model.dispose();
 }
 
-console.log(`AgentQuote overhead, ${COLS}x${ROWS}, Node ${process.version}, ${process.platform}-${process.arch}\n`);
+console.log(`Quote overhead, ${COLS}x${ROWS}, Node ${process.version}, ${process.platform}-${process.arch}\n`);
 await keystrokeLatency();
 await outputCost();
 for (const rows of [1000, 10000, 50000]) await memory(rows);

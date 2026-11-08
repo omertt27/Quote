@@ -16,8 +16,8 @@ An adapter is advertised only after it passes integration tests. Until then the 
 | ------------- | --------------- | ------------------------------------------------------------------------------------ |
 | macOS         | Supported       | Validated with real Claude Code. Option+R works as typed (`®`) or with Option set to send Meta |
 | Linux         | Supported       | Mock-agent tests run in CI on Ubuntu. Not yet validated with real Claude Code          |
-| Windows (WSL) | Supported as Linux | Run Claude Code and AgentQuote inside WSL, where it's plain Linux. The recommended way on Windows |
-| Windows (native) | **Experimental** | Code paths written (ConPTY, `.exe`/`.cmd` lookup, named pipe, PowerShell clipboard) and the test suite runs in CI on Windows, but nobody has used it with real Claude Code. If ConPTY doesn't pass through bracketed paste, AgentQuote refuses to send ("has not enabled bracketed paste") rather than typing blindly |
+| Windows (WSL) | Supported as Linux | Run Claude Code and Quote inside WSL, where it's plain Linux. The recommended way on Windows |
+| Windows (native) | **Experimental** | Code paths written (ConPTY, `.exe`/`.cmd` lookup, named pipe, PowerShell clipboard) and the test suite runs in CI on Windows, but nobody has used it with real Claude Code. If ConPTY doesn't pass through bracketed paste, Quote refuses to send ("has not enabled bracketed paste") rather than typing blindly |
 
 ## Terminals
 
@@ -36,7 +36,7 @@ Claude Code offers no supported API for its interactive state, so the Claude ada
 - `esc to interrupt` appearing while Claude works;
 - dialogs that replace the input box, and numbered option lists (`❯ 1. Yes`).
 
-If any of these change, the failure mode is safe. The adapter reports `unknown` and AgentQuote
+If any of these change, the failure mode is safe. The adapter reports `unknown` and Quote
 does not send, and the user can still put the reply in the prompt with Ctrl+T.
 
 ## Known limitations
@@ -49,11 +49,11 @@ does not send, and the user can still put the reply in the prompt with Ctrl+T.
   after the fact and reported, but it can't be prevented. See [SECURITY.md](SECURITY.md).
 - **Fullscreen renderer:** only the visible screen can be quoted, and none of the scrollback. Use
   `CLAUDE_CODE_NO_FLICKER=0` for the whole conversation.
-- **History length:** the classic renderer keeps the last 10,000 rows (`AGENTQUOTE_SCROLLBACK`
+- **History length:** the classic renderer keeps the last 10,000 rows (`QUOTE_SCROLLBACK`
   changes this, at about 1.6 MB per 1,000 rows at 120 columns). Whether Claude's classic renderer
   ever clears scrollback (`ESC[3J`) is unverified. The real test suite reports it.
 - `p` selects at most 300 rows either side of the cursor.
-- **Native terminal selection is invisible** to AgentQuote. Use the overlay, or copy text and press
+- **Native terminal selection is invisible** to Quote. Use the overlay, or copy text and press
   `c`.
 - **Reflow is heuristic.** Prose that the agent wrapped is rejoined into one line, and code, lists,
   and short lines are left alone. A line that only just fits the width can occasionally be joined

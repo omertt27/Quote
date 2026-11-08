@@ -1,5 +1,5 @@
 /**
- * Production-readiness scenarios: races during delivery, screens AgentQuote must not type into,
+ * Production-readiness scenarios: races during delivery, screens Quote must not type into,
  * quoted text that looks like commands, long and fullscreen sessions, and repeated replies.
  */
 import { afterEach, describe, expect, it } from 'vitest';
@@ -35,7 +35,7 @@ describe('delivery races', () => {
 
   it('raises an alarm, not a success, when Enter lands on a dialog that appeared at that instant', async () => {
     // The mock opens the dialog only once it has read the Enter. No screen check can see that in
-    // advance. This test proves AgentQuote reports it instead of claiming the reply was sent.
+    // advance. This test proves Quote reports it instead of claiming the reply was sent.
     const h = await start({ MOCK_DIALOG_ON_ENTER: '1' });
     await h.selectParagraph('fail open');
     await h.reply('Why?');
@@ -65,7 +65,7 @@ describe('delivery races', () => {
   });
 });
 
-describe('screens AgentQuote does not recognise', () => {
+describe('screens Quote does not recognise', () => {
   it('does not send, and Ctrl+T only fills the prompt without pressing Enter', async () => {
     const h = await start();
     h.type('/weird\r');

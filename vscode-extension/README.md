@@ -1,4 +1,4 @@
-# AgentQuote for VS Code
+# Quote for VS Code
 
 Reply to part of Claude Code's answer the way you reply to selected text in ChatGPT:
 
@@ -9,7 +9,7 @@ Reply to part of Claude Code's answer the way you reply to selected text in Chat
    only your question.
 4. Press Enter.
 
-**With `agentquote claude`, Enter sends.** AgentQuote can see Claude's screen, so it delivers the
+**With `quote claude`, Enter sends.** Quote can see Claude's screen, so it delivers the
 reply safely: it waits while Claude is working, and never sends while Claude is asking you a
 question.
 
@@ -30,7 +30,7 @@ your previous clipboard back.
 ## Safety
 
 - It only inserts into a terminal where `claude`, `codex` or `opencode` is running (setting:
-  `agentquote.agentProcesses`). A quote starts with `>`, which a plain shell would treat as a file
+  `quote.agentProcesses`). A quote starts with `>`, which a plain shell would treat as a file
   redirect.
 - The quote goes in as one bracketed paste and is never sent. You press Enter yourself.
 - Control characters are removed, so selected text can't end the paste early.
@@ -39,7 +39,7 @@ your previous clipboard back.
 ## Try it without installing
 
 ```bash
-code --extensionDevelopmentPath="$HOME/Desktop/agentQuote/vscode-extension"
+code --extensionDevelopmentPath="$HOME/Desktop/quote/vscode-extension"
 ```
 
 That opens a new VS Code window with the extension loaded. Open a terminal there, run `claude`,
@@ -48,7 +48,7 @@ and try it.
 ## Install
 
 ```bash
-cd ~/Desktop/agentQuote/vscode-extension
+cd ~/Desktop/quote/vscode-extension
 npx @vscode/vsce package --allow-missing-repository
-code --install-extension agentquote-vscode-0.1.0.vsix
+code --install-extension quote-vscode-0.1.0.vsix
 ```
