@@ -23,10 +23,9 @@ describe('finding the agent program on Windows', () => {
   writeFileSync(join(dir, 'codex'), 'not a Windows program: no extension');
 
   it('finds an npm-installed .cmd through PATHEXT, in a ;-separated PATH', () => {
-    // PATHEXT lists `.CMD` in capitals; Windows file names ignore case.
-    expect(findExecutable('claude', `C:\\nowhere;${dir}`, 'win32')?.toLowerCase()).toBe(
-      join(dir, 'claude.cmd').toLowerCase(),
-    );
+    // PATHEXT lists `.CMD` in capitals while the file is `claude.cmd`. This must work on a
+    // case-sensitive file system too, which is what Linux CI has.
+    expect(findExecutable('claude', `C:\\nowhere;${dir}`, 'win32')).toBe(join(dir, 'claude.cmd'));
   });
 
   it('ignores a file with no PATHEXT extension, which Windows could not run', () => {

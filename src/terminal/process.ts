@@ -122,8 +122,19 @@ export function findExecutable(
   platform: NodeJS.Platform = process.platform,
 ): string | null {
   const windows = platform === 'win32';
+  // PATHEXT lists extensions in capitals (`.CMD`) while files are usually lower case (`claude.cmd`).
+  // Most Windows folders ignore case, but case-sensitive ones exist (WSL can turn it on), so try
+  // both spellings.
   const extensions = windows
-    ? ['', ...(process.env.PATHEXT ?? '.COM;.EXE;.BAT;.CMD').split(';').filter(Boolean)]
+    ? [
+        '',
+        ...new Set(
+          (process.env.PATHEXT ?? '.COM;.EXE;.BAT;.CMD')
+            .split(';')
+            .filter(Boolean)
+            .flatMap((ext) => [ext.toLowerCase(), ext]),
+        ),
+      ]
     : [''];
   for (const dir of path.split(windows ? ';' : ':')) {
     if (!dir) continue;
