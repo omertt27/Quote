@@ -17,7 +17,8 @@ Enter: Send    Alt+Enter: Newline    Esc: Cancel
 - **Nothing stored.** Screen contents stay in memory and are discarded on exit.
 - **The agent is not modified.** It runs inside a pseudo-terminal, and everything passes through
   untouched until you press Alt+R.
-- MIT licensed. Supports Claude Code on macOS and Linux.
+- MIT licensed. Supports Claude Code on macOS and Linux. On Windows, use WSL. Native Windows is
+  experimental (see [compatibility](docs/COMPATIBILITY.md)).
 
 ## Install
 

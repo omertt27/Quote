@@ -5,7 +5,8 @@ import { MOCK_AGENT, sleep, waitUntil } from './helpers.js';
 /** Some sandboxes and containers cannot allocate a PTY. These tests need one, so they skip there. */
 async function probePty(): Promise<boolean> {
   try {
-    const p = await spawnPty({ file: '/bin/sh', args: ['-c', 'exit 0'], cols: 20, rows: 5 });
+    // Node rather than /bin/sh, so the probe also works on Windows.
+    const p = await spawnPty({ file: process.execPath, args: ['-e', ''], cols: 20, rows: 5 });
     await new Promise<void>((resolve) => p.onExit(() => resolve()));
     return true;
   } catch {

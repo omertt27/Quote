@@ -18,9 +18,16 @@ export interface RemoteTarget {
 
 const MAX_REQUEST_BYTES = 1_000_000;
 
-export function socketPathFor(pid = process.pid, dir = tmpdir()): string {
-  return join(dir, `agentquote-${pid}.sock`);
+/**
+ * Where a session listens. On Windows that is a named pipe. Its default access lets only its
+ * creator, administrators and the system account write to it, and a request has to be written, so
+ * other ordinary users can't send one.
+ */
+export function socketPathFor(pid = process.pid, dir = tmpdir(), platform: NodeJS.Platform = process.platform): string {
+  return platform === 'win32' ? `\\\\.\\pipe\\agentquote-${pid}` : join(dir, `agentquote-${pid}.sock`);
 }
+
+const isPipe = (path: string) => path.startsWith('\\\\.\\pipe\\');
 
 const MESSAGES: Record<RemoteResult, string> = {
   accepted: 'Sending. AgentQuote shows progress in the terminal.',
@@ -28,7 +35,8 @@ const MESSAGES: Record<RemoteResult, string> = {
   invalid: 'Both the quote and the reply must contain text.',
 };
 
-function handle(target: RemoteTarget, line: string): { ok: boolean; message: string } {
+/** Answers one request line. Exported for tests that can't open sockets. */
+export function handleRequest(target: RemoteTarget, line: string): { ok: boolean; message: string } {
   let request: unknown;
   try {
     request = JSON.parse(line);
@@ -44,10 +52,13 @@ function handle(target: RemoteTarget, line: string): { ok: boolean; message: str
 }
 
 export function startReplyServer(target: RemoteTarget, socketPath = socketPathFor()): Promise<Server> {
-  try {
-    unlinkSync(socketPath);
-  } catch {
-    // Nothing left over from an earlier run.
+  const pipe = isPipe(socketPath);
+  if (!pipe) {
+    try {
+      unlinkSync(socketPath);
+    } catch {
+      // Nothing left over from an earlier run.
+    }
   }
   const server = createServer((conn) => {
     let buffer = '';
@@ -61,19 +72,23 @@ export function startReplyServer(target: RemoteTarget, socketPath = socketPathFo
       }
       const end = buffer.indexOf('\n');
       if (end === -1) return;
-      conn.end(`${JSON.stringify(handle(target, buffer.slice(0, end)))}\n`);
+      conn.end(`${JSON.stringify(handleRequest(target, buffer.slice(0, end)))}\n`);
     });
   });
   return new Promise((resolve, reject) => {
-    // Create the socket file owner-only from the start, not just after a chmod.
-    const previous = process.umask(0o177);
+    // Create the socket file owner-only from the start, not just after a chmod. Named pipes have
+    // no file mode; Windows sets their access from the creating user.
+    const previous = pipe ? null : process.umask(0o177);
+    const restore = () => {
+      if (previous !== null) process.umask(previous);
+    };
     server.once('error', (error) => {
-      process.umask(previous);
+      restore();
       reject(error);
     });
     server.listen(socketPath, () => {
-      process.umask(previous);
-      chmodSync(socketPath, 0o600);
+      restore();
+      if (!pipe) chmodSync(socketPath, 0o600);
       resolve(server);
     });
   });
@@ -81,6 +96,7 @@ export function startReplyServer(target: RemoteTarget, socketPath = socketPathFo
 
 export function stopReplyServer(server: Server, socketPath = socketPathFor()): void {
   server.close();
+  if (isPipe(socketPath)) return;
   try {
     unlinkSync(socketPath);
   } catch {

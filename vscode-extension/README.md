@@ -3,12 +3,21 @@
 Reply to part of Claude Code's answer the way you reply to selected text in ChatGPT:
 
 1. Select text in the terminal where Claude Code runs.
-2. Click the **quote button** (❝) that appears in the terminal panel's toolbar while text is
-   selected, or right-click and choose **Quote in Reply**.
-3. The selection appears in Claude's input as a quote, with an empty line below it.
-4. Type your question and press Enter.
+2. Click the **quote button** (❝) in the terminal panel's toolbar, or right-click and choose
+   **Quote in Reply**.
+3. A reply box opens at the top of the window. Your quote is shown on its own line, and you type
+   only your question.
+4. Press Enter.
 
-It works with plain `claude`, with no wrapper needed, and with Codex and OpenCode.
+**With `agentquote claude`, Enter sends.** AgentQuote can see Claude's screen, so it delivers the
+reply safely: it waits while Claude is working, and never sends while Claude is asking you a
+question.
+
+**With plain `claude`, Enter puts the reply into Claude's input,** and you press Enter in the
+terminal to send it. The extension can't see Claude's screen, and if a "Do you want to
+proceed?" question were open, an automatic Enter would answer it.
+
+It also works with Codex and OpenCode.
 
 ## Why the button is in the toolbar, not next to the selection
 

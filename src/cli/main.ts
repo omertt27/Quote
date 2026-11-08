@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { adapters } from '../adapters/index.js';
+import { socketPathFor, startReplyServer, stopReplyServer } from '../core/remote.js';
 import { Session } from '../core/session.js';
 import { readClipboard } from '../terminal/clipboard.js';
 import { type AgentProcess, PtyUnavailableError, findExecutable, spawnPty } from '../terminal/process.js';
@@ -82,12 +83,21 @@ async function main(): Promise<void> {
     write: (data) => void process.stdout.write(data),
   });
 
+  // Lets the VS Code extension's reply box hand replies to this session. Optional: if the socket
+  // can't be created, everything else still works.
+  const socketPath = socketPathFor();
+  const replyServer = await startReplyServer(session, socketPath).catch(() => null);
+  const stopServer = () => {
+    if (replyServer) stopReplyServer(replyServer, socketPath);
+  };
+
   const restoreRawMode = () => {
     if (process.stdin.isTTY) process.stdin.setRawMode(false);
   };
   // If AgentQuote itself breaks, leave a usable shell behind rather than a raw one.
   process.on('uncaughtException', (error) => {
     process.stdout.write('\x1b[?1002l\x1b[?1006l\x1b[?2004l\x1b[?25h\x1b[?1049l');
+    stopServer();
     restoreRawMode();
     proc.kill('SIGKILL');
     process.stderr.write(`agentquote: internal error: ${error.stack ?? String(error)}\n`);
@@ -109,6 +119,7 @@ async function main(): Promise<void> {
   }
 
   const exit = await session.done;
+  stopServer();
   restoreRawMode();
   process.stdin.pause();
   process.exit(isSignal(exit.signal) ? 128 + (SIGNAL_NUMBERS[exit.signal] as number) : exit.code);

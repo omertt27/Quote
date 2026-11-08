@@ -1,42 +1,58 @@
+import { mkdtempSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import { describe, expect, it } from 'vitest';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { afterEach, describe, expect, it } from 'vitest';
+import { handleRequest, startReplyServer, stopReplyServer } from '../src/core/remote.js';
+import { Harness, sleep, waitUntil } from './helpers.js';
 
 const require = createRequire(import.meta.url);
-const { formatQuote, asPaste, findAgent } = require('../vscode-extension/quote.js') as {
+const q = require('../vscode-extension/quote.js') as {
   formatQuote: (s: string) => string;
+  composeMessage: (s: string, r: string) => string;
+  quotePreview: (s: string, max?: number) => string;
   asPaste: (s: string) => string;
-  findAgent: (ps: string, root: number, names: string[]) => string | null;
+  findAgent: (ps: string, root: number, names: string[]) => { name: string; agentQuotePid: number | null } | null;
+  sendToAgentQuote: (path: string, quote: string, reply: string) => Promise<{ ok: boolean; message: string }>;
 };
 
-describe('VS Code extension: formatQuote', () => {
+describe('VS Code extension: quote formatting', () => {
   it('turns a selection into a blockquote with room for the reply', () => {
-    expect(formatQuote('The runtime should fail open when the\n  policy server becomes unavailable.')).toBe(
+    expect(q.formatQuote('The runtime should fail open when the\n  policy server becomes unavailable.')).toBe(
       '> The runtime should fail open when the\n> policy server becomes unavailable.\n\n',
     );
   });
 
   it('strips the agent\'s message marker and box borders', () => {
-    expect(formatQuote('⏺ Done. Tests pass.')).toBe('> Done. Tests pass.\n\n');
-    expect(formatQuote('│ inside a box │')).toBe('> inside a box\n\n');
+    expect(q.formatQuote('⏺ Done. Tests pass.')).toBe('> Done. Tests pass.\n\n');
+    expect(q.formatQuote('│ inside a box │')).toBe('> inside a box\n\n');
   });
 
   it('keeps a list item\'s hanging indent', () => {
-    expect(formatQuote('  2. The runtime should\n     fail open')).toBe('> 2. The runtime should\n>    fail open\n\n');
+    expect(q.formatQuote('  2. The runtime should\n     fail open')).toBe('> 2. The runtime should\n>    fail open\n\n');
+  });
+
+  it('builds the same message format AgentQuote sends', () => {
+    expect(q.composeMessage('refactor', ' what do you mean? ')).toBe('> refactor\n\nwhat do you mean?');
+  });
+
+  it('shows a one-line preview of the quote in the reply box', () => {
+    expect(q.quotePreview('⏺ They let you\n  refactor safely.')).toBe('They let you refactor safely.');
+    expect(q.quotePreview('x'.repeat(300), 10)).toBe(`${'x'.repeat(9)}…`);
   });
 
   it('removes control characters, so a quote cannot end the paste', () => {
-    const out = asPaste(formatQuote('a\x1b[201~\r!rm -rf ~'));
+    const out = q.asPaste(q.composeMessage('a\x1b[201~\r!rm -rf ~', 'b\x1b[201~'));
     expect(out.match(/\x1b\[201~/g)).toHaveLength(1);
-    expect(out.endsWith('\x1b[201~')).toBe(true);
   });
 
   it('returns nothing for an empty or blank selection', () => {
-    expect(formatQuote('')).toBe('');
-    expect(formatQuote('  \n ')).toBe('');
+    expect(q.formatQuote('')).toBe('');
+    expect(q.quotePreview('  \n ')).toBe('');
   });
 });
 
-describe('VS Code extension: findAgent', () => {
+describe('VS Code extension: finding the agent', () => {
   const ps = [
     '  100     1 -zsh',
     '  200   100 node /Users/omer/Desktop/agentQuote/dist/cli/main.js claude',
@@ -46,27 +62,139 @@ describe('VS Code extension: findAgent', () => {
     '  600     1 -zsh',
     '  700   600 vim notes.md',
     '  800     1 -zsh',
-    '  900   800 /opt/homebrew/bin/codex --no-alt-screen',
+    '  810   800 agentquote claude',
+    '  820   810 claude --resume',
+    '  900     1 -zsh',
+    '  910   900 /opt/homebrew/bin/codex --no-alt-screen',
   ].join('\n');
 
-  it('finds an agent started from the shell by name', () => {
-    expect(findAgent(ps, 400, ['claude'])).toBe('claude');
-    expect(findAgent(ps, 800, ['claude', 'codex'])).toBe('codex');
+  it('finds plain Claude, with no AgentQuote to deliver through', () => {
+    expect(q.findAgent(ps, 400, ['claude'])).toEqual({ name: 'claude', agentQuotePid: null });
   });
 
-  it('recognises Claude Code\'s versioned native binary, also under the AgentQuote wrapper', () => {
-    expect(findAgent(ps, 100, ['claude'])).toBe('claude');
+  it('finds Claude under AgentQuote run from a checkout, and its versioned binary', () => {
+    expect(q.findAgent(ps, 100, ['claude'])).toEqual({ name: 'claude', agentQuotePid: 200 });
   });
 
-  it('does not match a terminal running something else', () => {
-    expect(findAgent(ps, 600, ['claude', 'codex'])).toBeNull();
+  it('finds Claude under an installed agentquote', () => {
+    expect(q.findAgent(ps, 800, ['claude'])).toEqual({ name: 'claude', agentQuotePid: 810 });
   });
 
-  it('only matches agents the user allows', () => {
-    expect(findAgent(ps, 800, ['claude'])).toBeNull();
+  it('finds other agents the user allows, and only those', () => {
+    expect(q.findAgent(ps, 900, ['claude', 'codex'])).toEqual({ name: 'codex', agentQuotePid: null });
+    expect(q.findAgent(ps, 900, ['claude'])).toBeNull();
   });
 
-  it('does not match an agent that runs in another terminal', () => {
-    expect(findAgent(ps, 999, ['claude', 'codex'])).toBeNull();
+  it('finds nothing in a terminal running something else', () => {
+    expect(q.findAgent(ps, 600, ['claude', 'codex'])).toBeNull();
+    expect(q.findAgent(ps, 999, ['claude', 'codex'])).toBeNull();
+  });
+});
+
+/** Some sandboxes forbid binding local sockets. The socket tests need one, so they skip there. */
+async function probeSockets(): Promise<boolean> {
+  const socket = join(mkdtempSync(join(process.env.TMPDIR ?? tmpdir(), 'aq-probe-')), 'p.sock');
+  try {
+    const server = await startReplyServer({ remoteReply: () => 'busy' }, socket);
+    stopReplyServer(server, socket);
+    return true;
+  } catch {
+    return false;
+  }
+}
+const hasSockets = await probeSockets();
+
+describe('reply requests (without a socket)', () => {
+  let harness: Harness | null = null;
+  afterEach(async () => {
+    await harness?.close();
+    harness = null;
+  });
+
+  it('delivers a reply request through the normal safe delivery', async () => {
+    harness = new Harness();
+    const h = harness;
+    await h.ready();
+    const answer = handleRequest(h.session, JSON.stringify({ type: 'reply', quote: '⏺ They let you refactor safely.', reply: 'why?' }));
+    expect(answer.ok).toBe(true);
+    await waitUntil(() => h.messages().length === 1, 4000, 'delivery');
+    expect(h.messages()[0]!.message).toBe('> They let you refactor safely.\n\nwhy?');
+  });
+
+  it('waits instead of sending into a permission dialog', async () => {
+    harness = new Harness();
+    const h = harness;
+    await h.ready();
+    await h.say('/perm');
+    expect(handleRequest(h.session, JSON.stringify({ type: 'reply', quote: 'refactor', reply: 'explain' })).ok).toBe(true);
+    await sleep(800);
+    expect(h.events().filter((e) => ['paste', 'confirmed', 'message'].includes(e.type))).toEqual([]);
+    expect(h.session.statusText).toMatch(/waiting for your answer/);
+    const second = handleRequest(h.session, JSON.stringify({ type: 'reply', quote: 'x y z', reply: 'again' }));
+    expect(second).toMatchObject({ ok: false, message: expect.stringMatching(/already showing/) });
+  });
+
+  it('rejects malformed, unsupported, and empty requests', () => {
+    const target = { remoteReply: () => 'invalid' as const };
+    expect(handleRequest(target, 'not json').ok).toBe(false);
+    expect(handleRequest(target, JSON.stringify({ type: 'run', command: 'rm -rf /' })).message).toBe('Unsupported request.');
+    expect(handleRequest(target, JSON.stringify({ type: 'reply', quote: ' ', reply: 'x' })).ok).toBe(false);
+  });
+});
+
+describe.skipIf(!hasSockets)('VS Code reply box → AgentQuote session, over the socket', () => {
+  let harness: Harness | null = null;
+  let stop: (() => void) | null = null;
+  afterEach(async () => {
+    stop?.();
+    await harness?.close();
+    harness = null;
+  });
+
+  async function connected(env: Record<string, string> = {}) {
+    harness = new Harness({ env });
+    await harness.ready();
+    const socket = join(mkdtempSync(join(process.env.TMPDIR ?? tmpdir(), 'aq-sock-')), 's.sock');
+    const server = await startReplyServer(harness.session, socket);
+    stop = () => stopReplyServer(server, socket);
+    return { h: harness, socket };
+  }
+
+  it('delivers a reply from the reply box to the running session', async () => {
+    const { h, socket } = await connected();
+    const result = await q.sendToAgentQuote(socket, 'They let you refactor safely.', 'what do you mean?');
+    expect(result.ok).toBe(true);
+    await waitUntil(() => h.messages().length === 1, 4000, 'delivery');
+    expect(h.messages()[0]!.message).toBe('> They let you refactor safely.\n\nwhat do you mean?');
+    await waitUntil(() => h.session.mode === 'passthrough', 2000, 'overlay to close');
+  });
+
+  it('does not send into a permission dialog; it waits, as replies typed in the overlay do', async () => {
+    const { h, socket } = await connected();
+    await h.say('/perm');
+    const result = await q.sendToAgentQuote(socket, 'refactor', 'explain');
+    expect(result.ok).toBe(true);
+    await sleep(800);
+    expect(h.events().filter((e) => ['paste', 'confirmed', 'message'].includes(e.type))).toEqual([]);
+    expect(h.session.statusText).toMatch(/waiting for your answer/);
+  });
+
+  it('refuses a second reply while one is in progress, and empty replies', async () => {
+    const { h, socket } = await connected();
+    await h.say('/perm');
+    expect((await q.sendToAgentQuote(socket, 'a quote', 'first')).ok).toBe(true);
+    const second = await q.sendToAgentQuote(socket, 'a quote', 'second');
+    expect(second.ok).toBe(false);
+    expect(second.message).toMatch(/already showing/);
+    expect((await q.sendToAgentQuote(socket, '   ', 'x')).ok).toBe(false);
+  });
+
+});
+
+describe('VS Code extension: no AgentQuote session', () => {
+  it('reports a clear error when no AgentQuote session is listening', async () => {
+    const result = await q.sendToAgentQuote(join(process.env.TMPDIR ?? tmpdir(), 'no-such-agentquote.sock'), 'a', 'b');
+    expect(result.ok).toBe(false);
+    expect(result.message).toMatch(/Could not reach AgentQuote/);
   });
 });

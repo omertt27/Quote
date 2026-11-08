@@ -14,9 +14,10 @@ An adapter is advertised only after it passes integration tests. Until then the 
 
 | Platform      | Status          | Notes                                                                                |
 | ------------- | --------------- | ------------------------------------------------------------------------------------ |
-| macOS         | Supported       | Option+R works as typed (`®`) or with Option set to send Meta                         |
-| Linux         | Supported       | CI runs on Ubuntu                                                                    |
-| Windows       | Not yet         | node-pty supports ConPTY, but nothing here has been tested there. `package.json` excludes it |
+| macOS         | Supported       | Validated with real Claude Code. Option+R works as typed (`®`) or with Option set to send Meta |
+| Linux         | Supported       | Mock-agent tests run in CI on Ubuntu. Not yet validated with real Claude Code          |
+| Windows (WSL) | Supported as Linux | Run Claude Code and AgentQuote inside WSL, where it's plain Linux. The recommended way on Windows |
+| Windows (native) | **Experimental** | Code paths written (ConPTY, `.exe`/`.cmd` lookup, named pipe, PowerShell clipboard) and the test suite runs in CI on Windows, but nobody has used it with real Claude Code. If ConPTY doesn't pass through bracketed paste, AgentQuote refuses to send ("has not enabled bracketed paste") rather than typing blindly |
 
 ## Terminals
 

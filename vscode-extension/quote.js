@@ -1,8 +1,12 @@
 'use strict';
 /**
- * Pure helpers for the VS Code extension: turning a terminal selection into a quote, and deciding
- * whether a terminal is running a coding agent. No VS Code API here, so they can be unit tested.
+ * Pure helpers for the VS Code extension: turning a terminal selection into a quote, building the
+ * reply message, finding the agent in a terminal, and talking to an AgentQuote session. No VS Code
+ * API here, so all of it can be unit tested.
  */
+const net = require('node:net');
+const os = require('node:os');
+const path = require('node:path');
 
 /** Removes terminal controls and bidi overrides. ESC above all, so a quote can't end a paste early. */
 function sanitize(text) {
@@ -49,21 +53,35 @@ function dedent(lines) {
 
 const MAX_QUOTE_CHARS = 20000;
 
-/**
- * Formats selected terminal text as a Markdown blockquote followed by an empty line, ready for the
- * user's reply, as ChatGPT shows a reply to selected text. Returns '' if nothing is left.
- */
-function formatQuote(selection) {
-  let lines = sanitize(selection).split('\n').map(stripChrome);
-  lines = dedent(lines).map((l) => l.replace(/[ \t]+$/, ''));
+/** The selected text as the agent actually wrote it, without UI markers or screen indentation. */
+function cleanSelection(selection) {
+  const lines = dedent(sanitize(selection).split('\n').map(stripChrome)).map((l) => l.replace(/[ \t]+$/, ''));
   let body = lines.join('\n').replace(/^\n+|\n+$/g, '');
   if (body.trim() === '') return '';
   if (body.length > MAX_QUOTE_CHARS) body = `${body.slice(0, MAX_QUOTE_CHARS)}\n[… truncated]`;
+  return body;
+}
+
+/** A Markdown blockquote of the selection, then an empty line for the reply. '' if nothing is left. */
+function formatQuote(selection) {
+  const body = cleanSelection(selection);
+  if (body === '') return '';
   const quoted = body
     .split('\n')
     .map((line) => (line.trim() === '' ? '>' : `> ${line}`))
     .join('\n');
   return `${quoted}\n\n`;
+}
+
+/** The full message: the quote as a blockquote, then the reply. The same format AgentQuote sends. */
+function composeMessage(selection, reply) {
+  return `${formatQuote(selection)}${sanitize(reply).trim()}`;
+}
+
+/** One line for the reply box: the quote with whitespace collapsed, shortened if long. */
+function quotePreview(selection, max = 140) {
+  const flat = cleanSelection(selection).replace(/\s+/g, ' ').trim();
+  return flat.length > max ? `${flat.slice(0, max - 1)}…` : flat;
 }
 
 /** Wraps text as one bracketed paste, so newlines are inserted rather than pressed as Enter. */
@@ -72,43 +90,122 @@ function asPaste(text) {
 }
 
 /**
+ * The program and its first argument from a command line, with Windows backslashes turned into
+ * slashes and a quoted program path (`"C:\Program Files\…\claude.exe"`) kept whole.
+ */
+function commandParts(args) {
+  const text = args.trim().replace(/\\/g, '/');
+  const quoted = /^"([^"]*)"\s*(.*)$/.exec(text);
+  const [program, rest] = quoted ? [quoted[1], quoted[2]] : [text.split(/\s+/)[0] ?? '', text.slice((text.split(/\s+/)[0] ?? '').length).trim()];
+  const firstArg = (/^"([^"]*)"/.exec(rest)?.[1] ?? rest.split(/\s+/)[0] ?? '');
+  return { program, base: program.split('/').pop().replace(/\.(exe|cmd|bat)$/i, '').toLowerCase(), firstArg };
+}
+
+const isNode = (base) => base === 'node' || base === 'nodejs';
+
+/**
  * The agent a process is, from its command line, or null. Claude Code's native build runs from a
- * file named after its version (`…/claude/versions/2.1.319`), so that path counts as `claude`.
+ * file named after its version (`…/claude/versions/2.1.319`), and an npm install runs as
+ * `node …/@anthropic-ai/claude-code/cli.js`; both count as `claude`.
  */
 function agentName(args, agentNames) {
-  const program = args.trim().split(/\s+/)[0] ?? '';
-  if (agentNames.includes('claude') && /\/claude\/versions\/[^/]+$/.test(program)) return 'claude';
-  const base = program.split('/').pop();
+  const { program, base, firstArg } = commandParts(args);
+  if (agentNames.includes('claude')) {
+    if (/\/claude\/versions\/[^/]+$/.test(program)) return 'claude';
+    if (isNode(base) && /\/claude-code\/cli\.m?js$/.test(firstArg)) return 'claude';
+  }
   return agentNames.includes(base) ? base : null;
 }
 
+/** AgentQuote's own CLI, installed (`agentquote`) or run from a checkout (`node …/dist/cli/main.js`). */
+function isAgentQuote(args) {
+  const { base, firstArg } = commandParts(args);
+  if (base === 'agentquote') return true;
+  return isNode(base) && /(?:^|\/)(?:agentquote|dist\/cli\/main\.js)$/.test(firstArg);
+}
+
 /**
- * Whether a coding agent runs under `rootPid` (the terminal's shell), from `ps -A -o pid=,ppid=,args=`
- * output. The quote starts with `>`, which a plain shell would treat as a redirect, so it is only
- * ever inserted into a terminal where an agent is running.
+ * The coding agent running under `rootPid` (the terminal's shell), from `ps -A -o pid=,ppid=,args=`
+ * output: `{ name, agentQuotePid }`, or null. `agentQuotePid` is set when the agent runs under
+ * AgentQuote, which can then deliver replies safely. A quote starts with `>`, which a plain shell
+ * would treat as a redirect, so nothing is ever inserted into a terminal with no agent.
  */
 function findAgent(psOutput, rootPid, agentNames) {
   const children = new Map();
-  const names = new Map();
+  const info = new Map();
   for (const line of psOutput.split('\n')) {
     const match = /^\s*(\d+)\s+(\d+)\s+(.+?)\s*$/.exec(line);
     if (!match) continue;
-    const [, pid, ppid, args] = match;
-    names.set(Number(pid), agentName(args, agentNames));
-    if (!children.has(Number(ppid))) children.set(Number(ppid), []);
-    children.get(Number(ppid)).push(Number(pid));
+    const pid = Number(match[1]);
+    const ppid = Number(match[2]);
+    info.set(pid, { agent: agentName(match[3], agentNames), wrapper: isAgentQuote(match[3]) });
+    if (!children.has(ppid)) children.set(ppid, []);
+    children.get(ppid).push(pid);
   }
-  const queue = [...(children.get(rootPid) ?? [])];
+  const queue = (children.get(rootPid) ?? []).map((pid) => ({ pid, agentQuotePid: null }));
   const seen = new Set();
   while (queue.length > 0) {
-    const pid = queue.shift();
+    const { pid, agentQuotePid } = queue.shift();
     if (seen.has(pid)) continue;
     seen.add(pid);
-    const name = names.get(pid);
-    if (name) return name;
-    queue.push(...(children.get(pid) ?? []));
+    const node = info.get(pid);
+    const wrapperPid = node?.wrapper ? pid : agentQuotePid;
+    if (node?.agent) return { name: node.agent, agentQuotePid: wrapperPid };
+    for (const child of children.get(pid) ?? []) queue.push({ pid: child, agentQuotePid: wrapperPid });
   }
   return null;
 }
 
-module.exports = { sanitize, formatQuote, asPaste, findAgent };
+/** Must match AgentQuote's own `socketPathFor`: a socket file, or a named pipe on Windows. */
+function socketPathFor(pid, dir = os.tmpdir(), platform = process.platform) {
+  return platform === 'win32' ? `\\\\.\\pipe\\agentquote-${pid}` : path.join(dir, `agentquote-${pid}.sock`);
+}
+
+/**
+ * The command that lists processes as `pid ppid command-line` lines: `ps` on macOS and Linux,
+ * PowerShell on Windows, which has no `ps`.
+ */
+function processListCommand(platform = process.platform) {
+  if (platform !== 'win32') return ['ps', ['-A', '-o', 'pid=,ppid=,args=']];
+  const script =
+    'Get-CimInstance Win32_Process | ForEach-Object { "$($_.ProcessId) $($_.ParentProcessId) $($_.CommandLine)" }';
+  return ['powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script]];
+}
+
+/** Hands a reply to an AgentQuote session. Resolves with `{ ok, message }`. */
+function sendToAgentQuote(socketPath, quote, reply, timeoutMs = 3000) {
+  return new Promise((resolve) => {
+    const conn = net.createConnection(socketPath);
+    let answer = '';
+    const done = (result) => {
+      conn.destroy();
+      resolve(result);
+    };
+    conn.setTimeout(timeoutMs, () => done({ ok: false, message: 'AgentQuote did not answer.' }));
+    conn.setEncoding('utf8');
+    conn.on('connect', () => conn.write(`${JSON.stringify({ type: 'reply', quote, reply })}\n`));
+    conn.on('data', (chunk) => {
+      answer += chunk;
+      if (!answer.includes('\n')) return;
+      try {
+        done(JSON.parse(answer));
+      } catch {
+        done({ ok: false, message: 'AgentQuote sent an unreadable answer.' });
+      }
+    });
+    conn.on('error', (error) => done({ ok: false, message: `Could not reach AgentQuote (${error.code ?? error.message}).` }));
+  });
+}
+
+module.exports = {
+  sanitize,
+  cleanSelection,
+  formatQuote,
+  composeMessage,
+  quotePreview,
+  asPaste,
+  findAgent,
+  socketPathFor,
+  processListCommand,
+  sendToAgentQuote,
+};

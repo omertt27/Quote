@@ -7,11 +7,14 @@ const READERS: Record<string, [string, string[]][]> = {
     ['xclip', ['-selection', 'clipboard', '-o']],
     ['xsel', ['--clipboard', '--output']],
   ],
+  win32: [['powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', 'Get-Clipboard -Raw']]],
 };
 
 function run(file: string, args: string[]): Promise<string | null> {
   return new Promise((resolve) => {
-    execFile(file, args, { timeout: 1000, maxBuffer: 1 << 20 }, (error, stdout) => {
+    // PowerShell can take most of a second to start, so allow it more time.
+    const timeout = file.startsWith('powershell') ? 3000 : 1000;
+    execFile(file, args, { timeout, maxBuffer: 1 << 20, windowsHide: true }, (error, stdout) => {
       resolve(error ? null : stdout);
     });
   });

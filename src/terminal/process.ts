@@ -53,8 +53,13 @@ function ensureSpawnHelper(): void {
 export async function spawnPty(options: SpawnOptions): Promise<AgentProcess> {
   const pty = await import('node-pty');
   ensureSpawnHelper();
+  const windows = process.platform === 'win32';
+  // npm installs command-line tools on Windows as .cmd scripts, which only cmd.exe can run.
+  const viaCmd = windows && /\.(cmd|bat)$/i.test(options.file);
+  const file = viaCmd ? (process.env.ComSpec ?? 'cmd.exe') : options.file;
+  const args = viaCmd ? ['/d', '/s', '/c', options.file, ...options.args] : options.args;
   try {
-    const child = pty.spawn(options.file, options.args, {
+    const child = pty.spawn(file, args, {
       name: process.env.TERM ?? 'xterm-256color',
       cols: options.cols,
       rows: options.rows,
@@ -68,7 +73,8 @@ export async function spawnPty(options: SpawnOptions): Promise<AgentProcess> {
         void child.onExit((e) => listener({ code: e.exitCode, signal: e.signal })),
       write: (data) => child.write(data),
       resize: (cols, rows) => child.resize(cols, rows),
-      kill: (signal) => child.kill(signal),
+      // Windows has no signals, and node-pty throws if one is passed there: it just ends the process.
+      kill: (signal) => (windows ? child.kill() : child.kill(signal)),
     };
   } catch (error) {
     throw new PtyUnavailableError(
@@ -106,15 +112,30 @@ export function spawnPipe(options: SpawnOptions): AgentProcess {
   };
 }
 
-export function findExecutable(name: string, path = process.env.PATH ?? ''): string | null {
-  for (const dir of path.split(':')) {
+/**
+ * Finds a program on PATH. On Windows, PATH is `;`-separated and programs carry an extension from
+ * PATHEXT (`claude.exe`, or `claude.cmd` when installed with npm).
+ */
+export function findExecutable(
+  name: string,
+  path = process.env.PATH ?? process.env.Path ?? '',
+  platform: NodeJS.Platform = process.platform,
+): string | null {
+  const windows = platform === 'win32';
+  const extensions = windows
+    ? ['', ...(process.env.PATHEXT ?? '.COM;.EXE;.BAT;.CMD').split(';').filter(Boolean)]
+    : [''];
+  for (const dir of path.split(windows ? ';' : ':')) {
     if (!dir) continue;
-    const candidate = join(dir, name);
-    try {
-      accessSync(candidate, constants.X_OK);
-      if (statSync(candidate).isFile()) return candidate;
-    } catch {
-      // Not in this PATH entry; keep looking.
+    for (const extension of extensions) {
+      const candidate = join(dir.replace(/^"|"$/g, ''), name + extension);
+      try {
+        // Windows has no execute bit; existing as a file with a PATHEXT extension is enough.
+        if (!windows) accessSync(candidate, constants.X_OK);
+        if (statSync(candidate).isFile() && (!windows || extension !== '')) return candidate;
+      } catch {
+        // Not in this PATH entry; keep looking.
+      }
     }
   }
   return null;
