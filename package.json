@@ -1,5 +1,5 @@
 {
-  "name": "quote",
+  "name": "@omertt27/quote",
   "version": "0.1.0",
   "description": "ChatGPT-style inline replies for terminal AI coding agents. Quote part of an agent's output and reply in the same live session.",
   "license": "MIT",
@@ -12,6 +12,9 @@
     "README.md",
     "LICENSE"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
   "engines": {
     "node": ">=20"
   },

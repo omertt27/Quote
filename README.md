@@ -35,7 +35,7 @@ Works with Claude Code on macOS and Linux. On Windows, use WSL. Native Windows i
 **1. Install** (Node.js 20 or later):
 
 ```bash
-npm install -g quote
+npm install -g @omertt27/quote
 ```
 
 **2. Start Claude through Quote:**
